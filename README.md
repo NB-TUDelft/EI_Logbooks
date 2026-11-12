@@ -119,6 +119,14 @@ Logbook_2.2_Ada_Lovelace.pdf (Ada Lovelace; partner Charles Babbage)
 Lab partners are expected to share data and graphs, so a flag is a reason to
 look, not a verdict.
 
+**Turnitin.** The logbook's own printed text (headings, questions, table
+labels) is identical for every student and would count toward Turnitin
+similarity in every submission. `tools/outline_template.py` therefore draws
+that text as vector outlines in the template PDFs: it looks the same, and AI
+that reads the page image can still read it, but text extraction (Turnitin,
+`parse_logbook.py`) returns only the students' answers and the NB2420 labels.
+`build_logbooks.py` runs it on every logbook it renders.
+
 ## Writing or changing a logbook (for next year)
 
 The logbooks are Typst files in the course book repository,
@@ -206,9 +214,10 @@ label reads `slot="setup_photo"`.
 python build_logbooks.py <path to Electronic_Instrumentation>/book site
 ```
 
-This renders every `*_logbook.typ` into `site/logbooks/` and rewrites
+This renders every `*_logbook.typ` into `site/logbooks/`, outlines the printed
+text (see [Plagiarism check](#plagiarism-check)) and rewrites
 `site/logbooks/index.json` (the list on the start page). It needs the
-`sphinx-typst-render` package from the course book. Open each new PDF on the
+`sphinx-typst-render` package from the course book and `pymupdf`. Open each new PDF on the
 local site (below), try every field and image box, export once, then commit
 `site/logbooks/` and push.
 
@@ -267,4 +276,5 @@ current slots, images and pages.
   `web/viewer.html`, which loads the add-on.
 - `tools/parse_logbook.py`, `tools/compare_logbooks.py`: reading and comparing
   exported PDFs.
+- `tools/outline_template.py`: printed template text to outlines (Turnitin).
 - `build_logbooks.py`: renders the Typst logbooks into `site/logbooks/`.
