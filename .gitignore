@@ -1,3 +1,5 @@
 server.log
 site/pdfjs/web/viewer_plain.html
 __pycache__/
+site_password.local.txt
+.wrangler/
