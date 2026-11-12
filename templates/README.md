@@ -38,8 +38,9 @@ and the site updates itself about a minute later.
 
 ## Highlight
 
-A logbook numbered `0.x` shows up in a highlighted box at the top of the start
-page. With no `0.x` file there is no box.
+Put logbook ids in `HIGHLIGHT` in `site/index.html` (now `['1.2']`), or add a
+logbook numbered `0.x`: they show in a highlighted box at the top of the start
+page. Nothing listed and no `0.x` file means no box.
 
 ## Building blocks
 

@@ -71,15 +71,17 @@ fetch('logbooks/index.json').then(r => r.json()).then(list => {
   if (hit) { location.replace(viewer(hit.file)); return; }
   const box = document.getElementById('list');
   box.innerHTML = '';
-  const groups = new Map();                       // week number -> logbooks
+  const HIGHLIGHT = ['1.2'];                      // logbooks in the Highlight box on top (they stay in their week too); [] = no box
+  const groups = new Map([[0, list.filter(l => HIGHLIGHT.includes(l.id))]]);   // week 0 = Highlight box
   for (const l of list) {
     const w = parseInt(l.id, 10);
     if (!groups.has(w)) groups.set(w, []);
-    groups.get(w).push(l);
+    if (w !== 0 || !HIGHLIGHT.includes(l.id)) groups.get(w).push(l);
   }
   for (const w of [...groups.keys()].sort((a, b) => a - b)) {
+    if (!groups.get(w).length) continue;
     const h = document.createElement('h2');
-    h.textContent = w === 0 ? 'Highlight' : 'Week ' + w;   // week 0 = highlighted logbook(s); no 0.x file, no box
+    h.textContent = w === 0 ? 'Highlight' : 'Week ' + w;
     const ul = Object.assign(document.createElement('ul'), { className: 'list' });
     for (const l of groups.get(w)) {
       const a = Object.assign(document.createElement('a'), { className: 'item', href: viewer(l.file) });
