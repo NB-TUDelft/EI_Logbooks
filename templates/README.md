@@ -38,9 +38,10 @@ and the site updates itself about a minute later.
 
 ## Highlight
 
-List logbook ids in [`highlight.txt`](highlight.txt), one per line (now `1.2`).
-They show in a box at the top of the start page and stay in their week too.
-Empty file: no box.
+[`highlight.txt`](highlight.txt) decides which logbooks sit in the box at the top
+of the start page. One line per change, `YYYY-MM-DD id id ...`; the latest line
+whose date has passed wins, so you can plan ahead (now `2.1 2.2` from 16 Nov).
+The site checks every night and switches by itself. `none` or no line: no box.
 
 ## Building blocks
 

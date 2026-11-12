@@ -43,10 +43,24 @@ def copy_bookmarks(src, pdf):
 
 
 def highlighted():
-    """Ids listed in templates/highlight.txt (one per line, # starts a comment)."""
+    """Ids from templates/highlight.txt. Lines are "[YYYY-MM-DD] id id ...";
+    the latest line whose date has passed (Amsterdam time) wins. # = comment."""
+    import datetime
     f = TEMPLATES / 'highlight.txt'
-    ids = [l.split('#')[0].strip() for l in f.read_text(encoding='utf-8').splitlines()] if f.exists() else []
-    return [i for i in ids if i]
+    try:
+        from zoneinfo import ZoneInfo
+        today = datetime.datetime.now(ZoneInfo('Europe/Amsterdam')).date().isoformat()
+    except Exception:
+        today = datetime.date.today().isoformat()
+    best, ids = '', []
+    for line in (f.read_text(encoding='utf-8').splitlines() if f.exists() else []):
+        words = line.split('#')[0].split()
+        if not words:
+            continue
+        date = words.pop(0) if re.fullmatch(r'\d{4}-\d{2}-\d{2}', words[0]) else ''
+        if date <= today and date >= best:
+            best, ids = date, [w for w in words if w.lower() != 'none']
+    return ids
 
 
 def write_index(entries):

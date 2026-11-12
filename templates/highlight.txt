@@ -1,3 +1,7 @@
-# Logbooks shown in the Highlight box at the top of the start page, one id per line.
-# Empty (or only comments) = no box. Push, and the site updates in about a minute.
+# Logbooks shown in the Highlight box at the top of the start page.
+# One line per change: "YYYY-MM-DD id id ..." applies from that date (Amsterdam time)
+# until a later line takes over. A line without a date always applies.
+# The site checks every night, so a future line switches the box by itself.
+# Only ids on the latest line that has started are shown. "none" = no box.
 1.2
+2026-11-16 2.1 2.2
