@@ -4,7 +4,8 @@
  * free images, comments, signatures, print and save):
  *   - image slots: an "Insert image" button on each reserved graph box; the
  *     image is fitted inside the box and tagged with its exercise
- *   - inserting blank pages and image pages after the current page, and
+ *   - a custom toolbar, and an Export button that writes a flattened hand-in PDF
+ *   - appending blank pages and image pages at the end, and
  *     deleting pages that were added (the logbook's own pages are locked)
  *   - autosave in the browser (IndexedDB), with an offer to restore
  *
@@ -15,9 +16,9 @@
  */
 (() => {
   'use strict';
-  const { PDFDocument, PDFName, PDFString, PDFHexString, PDFBool, PDFArray, PDFDict,
+  const { PDFDocument, PDFName, PDFString, PDFHexString, PDFBool, PDFArray, PDFDict, PDFStream, PDFRef,
           StandardFonts, rgb, drawImage: opDrawImage, pushGraphicsState, popGraphicsState,
-          degrees } = PDFLib;
+          concatTransformationMatrix, drawObject, degrees } = PDFLib;
 
   const GENERAL = 'General / other';
   const A4 = [595.28, 841.89];
@@ -34,6 +35,8 @@
     o.set('enableComment', true);           // as in Firefox
     o.set('enableSignatureEditor', true);   // as in Firefox
     o.set('enableScripting', false);        // logbooks need no PDF scripts
+    o.set('viewerCssTheme', 1);             // same light look in every browser and OS theme
+    o.set('sidebarViewOnLoad', 0);          // no thumbnail sidebar: our own bar replaces the chrome
   });
 
   const app = () => window.PDFViewerApplication;
@@ -144,10 +147,10 @@
       if (a.pdfDocument !== doc || state.id !== id) return;
       await idb.put(id, { bytes, time: nowIso(), filename: state.filename });
       state.lastHash = hash;
-      setSaveBadge('Autosaved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setSaveBadge('Saved in this browser ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
     } catch (err) {
       console.warn('[logbook] autosave failed', err);
-      setSaveBadge('Autosave unavailable: save with Ctrl+S');
+      setSaveBadge('Not saved in this browser: export to keep your work', 'warn');
     } finally {
       if (!fromTransform) state.busy = false;
     }
@@ -166,9 +169,10 @@
   };
 
   let badge;
-  function setSaveBadge(text) {
+  function setSaveBadge(text, tone = '') {
     if (!badge) return;
     badge.textContent = text;
+    badge.dataset.tone = tone;
   }
 
   async function offerRestore() {
@@ -183,7 +187,8 @@
     state.restorePending = true;
     const done = () => { bar.remove(); state.restorePending = false; };
     const bar = $('div', { class: 'lb-restore', role: 'alert' },
-      $('span', {}, `You have unsaved work on this logbook from ${label}.`),
+      $('div', { class: 'lb-restore-text' }, $('strong', {}, 'Continue where you left off?'),
+        $('span', {}, `This browser has your work on this logbook from ${label}.`)),
       $('button', { class: 'lb-btn lb-primary', onclick: async () => {
         done();
         if (state.doc !== doc) return;
@@ -191,7 +196,7 @@
         catch (err) { toast('Could not restore: ' + err.message); }
       } }, 'Restore my work'),
       $('button', { class: 'lb-btn', onclick: async () => { done(); await idb.del(id); } }, 'Start fresh'));
-    document.getElementById('viewerContainer').before(bar);
+    document.body.append(bar);
   }
 
   // ----------------------------------------------------------- reading
@@ -321,7 +326,9 @@
       pl.getInfoDict().set(PDFName.of(KEY.slots), PDFHexString.fromText(JSON.stringify(
         state.slots.map(({ name, ordinal, rect, exercise }) => ({ name, ordinal, rect, exercise })))));
       pl.getInfoDict().set(PDFName.of(KEY.images), PDFHexString.fromText(JSON.stringify(state.images)));
-      const bytes = await pl.save();
+      // pdf.js already wrote the field appearances (with fonts that cover Ω, µ, ...);
+      // pdf-lib regenerating them with WinAnsi Helvetica would fail on those characters.
+      const bytes = await pl.save({ updateFieldAppearances: false });
       state.opCount++;
       await reopen(bytes);  // busy stays set until the new document is up
       if (targetPage) app().pdfViewer.currentPageNumber = targetPage;
@@ -387,9 +394,11 @@
     if (exercise) page.node.set(PDFName.of(KEY.exercise), PDFHexString.fromText(exercise));
   }
 
+  // Added pages always go at the end of the logbook (no reordering).
   async function insertBlankPage() {
-    const at = app().pdfViewer.currentPageNumber; // insert after this page
-    const exercise = exerciseForPage(at - 1);
+    const a = app();
+    const at = a.pagesCount;
+    const exercise = exerciseForPage(a.pdfViewer.currentPageNumber - 1);
     await transform(async pl => {
       const size = pl.getPage(0).getSize();
       const page = pl.insertPage(at, [size.width, size.height]);
@@ -400,8 +409,8 @@
   }
 
   async function insertImagePage() {
-    const at = app().pdfViewer.currentPageNumber;
-    const exercise = await askExercise(exerciseForPage(at - 1));
+    const at = app().pagesCount;
+    const exercise = await askExercise(exerciseForPage(app().pdfViewer.currentPageNumber - 1));
     if (!exercise) return;
     const file = await getImageFile();
     if (!file) return;
@@ -434,7 +443,7 @@
     const n = app().pdfViewer.currentPageNumber;
     const info = state.pageInfo[n - 1];
     if (!info || !info.added) { toast('Pages of the logbook itself cannot be deleted. Only pages you added can.'); return; }
-    if (!confirm(`Delete page ${n} (a page you added)?`)) return;
+    if (!await askConfirm(`Delete page ${n}?`, 'This page and everything on it will be removed.', 'Delete page')) return;
     await transform(async pl => {
       // drop metadata of an image page's notes field on this page
       const page = pl.getPage(n - 1);
@@ -451,23 +460,235 @@
   }
 
   // ---------------------------------------------------------------- UI
-  function askExercise(preselect) {
+  function modal(title, body, actions, label) {
+    // actions: [{text, primary, danger, id, value}]; resolves with the chosen value (null on cancel)
     return new Promise(resolve => {
-      const choices = [...new Set([...state.exercises.map(e => e.title), GENERAL])];
-      const select = $('select', { class: 'lb-select', 'aria-label': 'Exercise' },
-        ...choices.map(c => { const o = $('option', {}, c); if (c === preselect) o.selected = true; return o; }));
-      const close = v => { overlay.remove(); resolve(v); };
-      const overlay = $('div', { class: 'lb-modal-backdrop', onclick: e => { if (e.target === overlay) close(null); } },
-        $('div', { class: 'lb-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add image page' },
-          $('h2', {}, 'Add image page'),
-          $('label', {}, 'Which exercise is this image for?', select),
-          $('div', { class: 'lb-modal-actions' },
-            $('button', { class: 'lb-btn', onclick: () => close(null) }, 'Cancel'),
-            $('button', { class: 'lb-btn lb-primary', id: 'lbExerciseOk', onclick: () => close(select.value) }, 'Choose image'))));
-      overlay.addEventListener('keydown', e => { if (e.key === 'Escape') close(null); });
+      const prev = document.activeElement;
+      const close = v => { overlay.remove(); prev?.focus?.(); resolve(v); };
+      const buttons = actions.map(x => $('button', {
+        type: 'button', class: 'lb-btn' + (x.primary ? ' lb-primary' : '') + (x.danger ? ' lb-danger' : ''),
+        ...(x.id ? { id: x.id } : {}), onclick: () => close(typeof x.value === 'function' ? x.value() : x.value) }, x.text));
+      const dlg = $('div', { class: 'lb-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': label || title },
+        $('h2', {}, title), ...body, $('div', { class: 'lb-modal-actions' }, ...buttons));
+      const overlay = $('div', { class: 'lb-modal-backdrop', onclick: e => { if (e.target === overlay) close(null); } }, dlg);
+      overlay.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { e.stopPropagation(); close(null); }
+        if (e.key === 'Tab') { // keep focus inside the dialog
+          const f = [...dlg.querySelectorAll('button, select, input, textarea')];
+          const i = f.indexOf(document.activeElement);
+          if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+          else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+        }
+      });
       document.body.append(overlay);
-      select.focus();
+      (dlg.querySelector('select, input') || buttons[buttons.length - 1]).focus();
     });
+  }
+
+  function askExercise(preselect) {
+    const choices = [...new Set([...state.exercises.map(e => e.title), GENERAL])];
+    const select = $('select', { class: 'lb-select', 'aria-label': 'Exercise' },
+      ...choices.map(c => { const o = $('option', {}, c); if (c === preselect) o.selected = true; return o; }));
+    return modal('Add image page', [
+      $('p', { class: 'lb-modal-text' }, 'The image goes on a new page at the end of your logbook, with a box for notes.'),
+      $('label', { class: 'lb-field' }, $('span', {}, 'Which exercise is it for?'), select)],
+      [{ text: 'Cancel', value: null }, { text: 'Choose image', primary: true, id: 'lbExerciseOk', value: () => select.value }]);
+  }
+
+  const askConfirm = (title, text, ok) => modal(title, [$('p', { class: 'lb-modal-text' }, text)],
+    [{ text: 'Cancel', value: false }, { text: ok, primary: true, danger: true, id: 'lbConfirmOk', value: true }]);
+
+  // ------------------------------------------------------- flattened export
+  // The hand-in PDF has no form fields or annotations left: every field value,
+  // drawing, text box and image is painted into the page itself, so any PDF
+  // reader or grading script sees it as ordinary page content.
+  //
+  // Form-field text is drawn here rather than taken from the viewer's
+  // appearance streams: once a field holds a character outside WinAnsi
+  // (Ω, µ, ...) pdf.js saves every field without an appearance. The text is set
+  // in Liberation Sans (shipped with pdf.js), embedded as a subset.
+  const SCRIPT_URL = (document.currentScript && document.currentScript.src) || location.href;
+  let fieldFontBytes = null;
+  async function loadFieldFont() {
+    if (!window.fontkit) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = new URL('fontkit.umd.min.js', SCRIPT_URL).href;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('could not load the font tools'));
+        document.head.append(s);
+      });
+    }
+    if (!fieldFontBytes) {
+      const r = await fetch(new URL('../pdfjs/web/standard_fonts/LiberationSans-Regular.ttf', SCRIPT_URL));
+      if (!r.ok) throw new Error('could not load the font');
+      fieldFontBytes = await r.arrayBuffer();
+    }
+    return fieldFontBytes;
+  }
+
+  function wrapLines(text, font, size, width) {
+    const out = [];
+    for (const para of text.split('\n')) {
+      let line = '';
+      for (const word of para.split(/ +/)) {
+        const tryLine = line ? line + ' ' + word : word;
+        if (font.widthOfTextAtSize(tryLine, size) <= width) { line = tryLine; continue; }
+        if (line) out.push(line);
+        line = '';
+        let piece = '';
+        for (const ch of word) {                                  // words longer than the box
+          if (font.widthOfTextAtSize(piece + ch, size) > width && piece) { out.push(piece); piece = ''; }
+          piece += ch;
+        }
+        line = piece;
+      }
+      out.push(line);
+    }
+    return out;
+  }
+
+  function drawFieldText(page, font, charset, rect, value, da, ff, q) {
+    const x1 = Math.min(rect[0], rect[2]), x2 = Math.max(rect[0], rect[2]);
+    const y1 = Math.min(rect[1], rect[3]), y2 = Math.max(rect[1], rect[3]);
+    const w = x2 - x1, h = y2 - y1, pad = 2;
+    const text = [...value.replace(/\r\n?/g, '\n')]
+      .map(c => (c === '\n' || charset.has(c.codePointAt(0))) ? c : '?').join('');
+    const sizeDA = parseFloat((da.match(/([\d.]+)\s+Tf/) || [])[1]) || 0;
+    let color = rgb(0, 0, 0);
+    const mRgb = da.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg/), mG = da.match(/([\d.]+)\s+g(\s|$)/);
+    if (mRgb) color = rgb(+mRgb[1], +mRgb[2], +mRgb[3]); else if (mG) color = rgb(+mG[1], +mG[1], +mG[1]);
+    const xFor = (line, size) => {
+      const tw = font.widthOfTextAtSize(line, size);
+      return q === 1 ? x1 + (w - tw) / 2 : q === 2 ? x2 - pad - tw : x1 + pad;
+    };
+    if (ff & 4096) {                                              // multi-line
+      let size = sizeDA || 10, lines = wrapLines(text, font, size, w - 2 * pad);
+      while (size > 5 && lines.length * size * 1.2 > h - 2 * pad) {
+        size -= 0.5; lines = wrapLines(text, font, size, w - 2 * pad);
+      }
+      lines.forEach((line, i) => {
+        if (line) page.drawText(line, { x: xFor(line, size), y: y2 - pad - size * (0.9 + 1.2 * i), size, font, color });
+      });
+    } else {
+      const line = text.replace(/\n/g, ' ');
+      let size = sizeDA || Math.min(12, (h - 2) / 1.2);
+      while (size > 4 && font.widthOfTextAtSize(line, size) > w - 2 * pad) size -= 0.5;
+      page.drawText(line, { x: xFor(line, size), y: y1 + h / 2 - size * 0.35, size, font, color });
+    }
+  }
+
+  async function flattenedBytes() {
+    const a = app();
+    a.pdfViewer._layerProperties?.annotationEditorUIManager?.endCurrentEditing?.();
+    const fontBytes = await loadFieldFont();
+    const pl = await PDFDocument.load(await a.pdfDocument.saveDocument(), { updateMetadata: false });
+    pl.registerFontkit(window.fontkit);
+    const font = await pl.embedFont(fontBytes, { subset: true });
+    const charset = new Set(font.getCharacterSet());
+    const ctx = pl.context;
+    const N = n => PDFName.of(n);
+    const nums = arr => (arr instanceof PDFArray) ? arr.asArray().map(x => ctx.lookup(x).asNumber()) : null;
+    const inherit = (d, key) => {
+      for (let n = d, i = 0; n instanceof PDFDict && i < 20; n = n.lookup(N('Parent')), i++) {
+        const v = n.lookup(N(key)); if (v !== undefined) return v;
+      }
+      return undefined;
+    };
+    const acro = pl.catalog.lookup(N('AcroForm'));
+    const daDefault = acro instanceof PDFDict && acro.lookup(N('DA'));
+    const textOf = v => (v && v.decodeText) ? v.decodeText() : '';
+    const fieldName = d => {
+      const parts = [];
+      for (let n = d, i = 0; n instanceof PDFDict && i < 20; n = n.lookup(N('Parent')), i++) {
+        const t = n.lookup(N('T')); if (t && t.decodeText) parts.unshift(t.decodeText());
+      }
+      return parts.join('.');
+    };
+    for (const page of pl.getPages()) {
+      const annots = page.node.lookup(N('Annots'));
+      if (!(annots instanceof PDFArray)) continue;
+      const keep = [], ops = [], texts = [];
+      for (let i = 0; i < annots.size(); i++) {
+        const ref = annots.get(i);
+        const d = ctx.lookup(ref);
+        if (!(d instanceof PDFDict)) continue;
+        const sub = String(d.lookup(N('Subtype')) || '');
+        if (sub === '/Link') { keep.push(ref); continue; }        // bookmarks and links keep working
+        if (sub === '/Popup') continue;
+        const flags = d.lookup(N('F')); const f = flags ? flags.asNumber() : 0;
+        if (f & 2 || f & 32) continue;                            // hidden / no-view
+        if (sub === '/Widget' && fieldName(d).startsWith('img_')) continue; // unused image slot
+        if (sub === '/Widget' && String(inherit(d, 'FT')) === '/Tx') {      // text field: draw its value
+          const value = textOf(inherit(d, 'V'));
+          const ffv = inherit(d, 'Ff'), qv = inherit(d, 'Q'), rect = nums(d.lookup(N('Rect')));
+          const ff = ffv ? ffv.asNumber() : 0;
+          if (value.trim() && rect && !(ff & 8192)) {
+            texts.push([rect, value, textOf(inherit(d, 'DA') || daDefault), ff, qv ? qv.asNumber() : 0]);
+          }
+          continue;
+        }
+        const ap = d.lookup(N('AP'));
+        if (!(ap instanceof PDFDict)) continue;
+        let apRef = ap.get(N('N')), n = ctx.lookup(apRef);
+        if (n instanceof PDFDict) {                               // on/off states (checkboxes)
+          const as = d.lookup(N('AS'));
+          if (!as) continue;
+          apRef = n.get(as); n = ctx.lookup(apRef);
+        }
+        if (!(n instanceof PDFStream)) continue;
+        if (!(apRef instanceof PDFRef)) apRef = ctx.register(n);
+        const bbox = nums(n.dict.lookup(N('BBox'))), rect = nums(d.lookup(N('Rect')));
+        if (!bbox || !rect) continue;
+        const m = nums(n.dict.lookup(N('Matrix'))) || [1, 0, 0, 1, 0, 0];
+        // Map the appearance box (after its own Matrix) onto the annotation rectangle.
+        const pts = [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[0], bbox[3]], [bbox[2], bbox[3]]]
+          .map(([x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]);
+        const bx1 = Math.min(...pts.map(p => p[0])), bx2 = Math.max(...pts.map(p => p[0]));
+        const by1 = Math.min(...pts.map(p => p[1])), by2 = Math.max(...pts.map(p => p[1]));
+        const rx1 = Math.min(rect[0], rect[2]), rx2 = Math.max(rect[0], rect[2]);
+        const ry1 = Math.min(rect[1], rect[3]), ry2 = Math.max(rect[1], rect[3]);
+        if (bx2 - bx1 < 1e-6 || by2 - by1 < 1e-6) continue;
+        const sx = (rx2 - rx1) / (bx2 - bx1), sy = (ry2 - ry1) / (by2 - by1);
+        const name = page.node.newXObject('Flat', apRef);
+        ops.push(pushGraphicsState(), concatTransformationMatrix(sx, 0, 0, sy, rx1 - sx * bx1, ry1 - sy * by1),
+          drawObject(name), popGraphicsState());
+      }
+      if (keep.length) page.node.set(N('Annots'), ctx.obj(keep)); else page.node.delete(N('Annots'));
+      if (ops.length) page.pushOperators(...ops);
+      for (const [rect, value, da, ff, q] of texts) drawFieldText(page, font, charset, rect, value, da, ff, q);
+    }
+    pl.catalog.delete(N('AcroForm'));
+    pl.getInfoDict().set(N('LogbookExported'), PDFHexString.fromText(nowIso()));
+    return pl.save({ updateFieldAppearances: false });
+  }
+
+  function downloadBytes(bytes, name) {
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const link = $('a', { href: url, download: name, class: 'lb-hidden-input' });
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  async function exportPdf() {
+    if (!app()?.pdfDocument || state.busy) return;
+    state.busy = true;
+    document.body.classList.add('lb-busy');
+    setSaveBadge('Preparing your PDF…');
+    try {
+      const bytes = await flattenedBytes();
+      downloadBytes(bytes, (state.id || 'logbook') + '.pdf');
+      state.savedHash = state.lastHash;
+      setSaveBadge('Exported ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
+      toast('Exported. Hand in this PDF on Brightspace.', 6000);
+    } catch (err) {
+      console.error('[logbook] export failed', err);
+      setSaveBadge('Export failed', 'warn');
+      toast('Export failed: ' + err.message, 8000);
+    } finally {
+      state.busy = false;
+      document.body.classList.remove('lb-busy');
+    }
   }
 
   function svgIcon(path) {
@@ -476,37 +697,186 @@
     s.innerHTML = path;
     return s;
   }
+  const S = 'fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"';
   const ICONS = {
-    blank: '<path d="M4 1.5h5l3 3v10H4z" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 7v5M5.5 9.5h5" stroke="currentColor" stroke-width="1.2"/>',
-    image: '<rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="5.5" cy="6" r="1.3" fill="currentColor"/><path d="M2 12l4-4 3 3 2-2 3 3" fill="none" stroke="currentColor" stroke-width="1.2"/>',
-    del: '<path d="M3 4h10M6 4V2.5h4V4M4.5 4l.7 9.5h5.6l.7-9.5" fill="none" stroke="currentColor" stroke-width="1.2"/>',
+    prev: `<path ${S} d="M12.5 4.5 7 10l5.5 5.5"/>`,
+    next: `<path ${S} d="M7.5 4.5 13 10l-5.5 5.5"/>`,
+    minus: `<path ${S} d="M5 10h10"/>`,
+    plus: `<path ${S} d="M10 5v10M5 10h10"/>`,
+    select: `<path ${S} d="M5 3.5l10 6.2-4.4 1.1-2.1 4.2z"/>`,
+    text: `<path ${S} d="M4.5 5V3.8h11V5M10 3.8v12.4M7.8 16.2h4.4"/>`,
+    draw: `<path ${S} d="M13.5 3.8l2.7 2.7-8.8 8.8-3.6.9.9-3.6z"/><path ${S} d="M11.6 5.7l2.7 2.7"/>`,
+    highlight: `<path ${S} d="M7 12.5l6.8-6.8 2 2L9 14.5H7z"/><path ${S} d="M3.5 16.5h7"/>`,
+    image: `<rect ${S} x="3" y="4" width="14" height="12" rx="2"/><circle cx="7.5" cy="8.3" r="1.4" fill="currentColor"/><path ${S} d="M3.5 14.5l4-3.8 3 2.8 2-1.8 4 3.3"/>`,
+    blank: `<path ${S} d="M5 2.8h6.5l3.5 3.5v10.9H5z"/><path ${S} d="M10 9v5M7.5 11.5h5"/>`,
+    imagePage: `<path ${S} d="M5 2.8h6.5l3.5 3.5v10.9H5z"/><path ${S} d="M6.8 15l2.4-2.6 1.8 1.7 1.3-1.2 1.4 1.5"/><circle cx="8.6" cy="9.4" r="1" fill="currentColor"/>`,
+    trash: `<path ${S} d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>`,
+    export: `<path ${S} d="M10 3.5v9M6.3 8.8 10 12.5l3.7-3.7M4 15v1.5h12V15"/>`,
+    more: '<circle cx="5" cy="10" r="1.4" fill="currentColor"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/><circle cx="15" cy="10" r="1.4" fill="currentColor"/>',
   };
+  const icon = name => { const s = svgIcon(ICONS[name]); s.setAttribute('viewBox', '0 0 20 20'); return s; };
 
-  let delBtn;
-  function buildToolbar() {
-    if (document.getElementById('lbPageTools')) return;
-    const sep = document.getElementById('editorModeSeparator');
-    if (!sep) return;
-    const mk = (id, label, icon, onclick) => {
-      const b = $('button', { id, class: 'toolbarButton lb-toolbar-btn', type: 'button', title: label, 'aria-label': label, onclick });
-      b.append(svgIcon(icon), $('span', {}, label));
+  // pdf.js editor modes and their parameters (see AnnotationEditorType / ParamsType in pdf.mjs)
+  const MODE = { NONE: 0, FREETEXT: 3, HIGHLIGHT: 9, STAMP: 13, INK: 15 };
+  const PARAM = { FREETEXT_SIZE: 11, FREETEXT_COLOR: 12, INK_COLOR: 21, INK_THICKNESS: 22, HIGHLIGHT_COLOR: 31 };
+  const STYLE = {
+    [MODE.FREETEXT]: { colorParam: PARAM.FREETEXT_COLOR, colors: ['#1d1d1f', '#1f5fd1', '#c8321e', '#178a4c'],
+                       sizeParam: PARAM.FREETEXT_SIZE, sizes: [[10, 'S'], [14, 'M'], [20, 'L']] },
+    [MODE.INK]:      { colorParam: PARAM.INK_COLOR, colors: ['#1d1d1f', '#1f5fd1', '#c8321e', '#178a4c'],
+                       sizeParam: PARAM.INK_THICKNESS, sizes: [[1, 'S'], [2, 'M'], [4, 'L']] },
+    [MODE.HIGHLIGHT]: { colorParam: PARAM.HIGHLIGHT_COLOR, colors: ['#FFFF98', '#53FFBC', '#80EBFF', '#FFCBE6'] },
+  };
+  const chosen = {}; // per mode: {color, size}
+
+  const ui = {};
+  function buildBar() {
+    if (document.getElementById('lbBar')) return;
+    const outer = document.getElementById('outerContainer');
+    if (!outer) return;
+    const btn = (id, label, iconName, onclick, opts = {}) => {
+      const b = $('button', { id, type: 'button', class: 'lb-tb' + (opts.cls ? ' ' + opts.cls : ''), title: opts.title || label, 'aria-label': label, onclick });
+      if (iconName) b.append(icon(iconName));
+      if (opts.text) b.append($('span', { class: 'lb-tb-label' }, opts.text));
       return b;
     };
-    delBtn = mk('lbDeletePage', 'Delete page', ICONS.del, deleteCurrentPage);
-    const group = $('div', { id: 'lbPageTools', class: 'toolbarHorizontalGroup' },
-      mk('lbInsertBlank', 'Insert blank page', ICONS.blank, insertBlankPage),
-      mk('lbInsertImagePage', 'Insert image page', ICONS.image, insertImagePage),
-      delBtn);
-    sep.before($('div', { class: 'verticalToolbarSeparator' }), group);
-    badge = $('span', { id: 'lbSaveBadge', class: 'toolbarLabel lb-badge' }, '');
-    document.getElementById('toolbarViewerRight').prepend(badge);
+    const a = () => app();
+
+    ui.title = $('div', { class: 'lb-title' }, $('span', { class: 'lb-mark' }, 'NB2420'), $('span', { class: 'lb-name' }, 'Logbook'));
+    ui.pageInput = $('input', { id: 'lbPageNumber', class: 'lb-page-input', type: 'text', inputmode: 'numeric', 'aria-label': 'Page number', value: '1' });
+    ui.pageInput.addEventListener('change', () => {
+      const n = parseInt(ui.pageInput.value, 10);
+      if (n >= 1 && n <= a().pagesCount) a().pdfViewer.currentPageNumber = n; else syncPage();
+    });
+    ui.pageInput.addEventListener('focus', () => ui.pageInput.select());
+    ui.pageCount = $('span', { class: 'lb-page-count' }, '/ 1');
+    ui.zoom = $('span', { class: 'lb-zoom-value', id: 'lbZoomValue' }, '100%');
+    const nav = $('div', { class: 'lb-group', role: 'group', 'aria-label': 'Pages' },
+      btn('lbPrev', 'Previous page', 'prev', () => a().pdfViewer.previousPage()),
+      ui.pageInput, ui.pageCount,
+      btn('lbNext', 'Next page', 'next', () => a().pdfViewer.nextPage()));
+    const zoom = $('div', { class: 'lb-group lb-hide-sm', role: 'group', 'aria-label': 'Zoom' },
+      btn('lbZoomOut', 'Zoom out', 'minus', () => a().pdfViewer.decreaseScale()),
+      $('button', { type: 'button', class: 'lb-tb lb-zoom-btn', title: 'Fit to width', 'aria-label': 'Fit to width',
+                    onclick: () => { a().pdfViewer.currentScaleValue = 'page-width'; } }, ui.zoom),
+      btn('lbZoomIn', 'Zoom in', 'plus', () => a().pdfViewer.increaseScale()));
+
+    ui.tools = {};
+    const tool = (mode, id, label, iconName) => {
+      const b = btn(id, label, iconName, () => setMode(ui.mode === mode && mode !== MODE.NONE ? MODE.NONE : mode),
+        { cls: 'lb-tool', text: label });
+      b.setAttribute('aria-pressed', 'false');
+      ui.tools[mode] = b;
+      return b;
+    };
+    const toolGroup = $('div', { class: 'lb-group lb-tools', role: 'toolbar', 'aria-label': 'Tools' },
+      tool(MODE.NONE, 'lbToolSelect', 'Select', 'select'),
+      tool(MODE.FREETEXT, 'lbToolText', 'Text', 'text'),
+      tool(MODE.INK, 'lbToolDraw', 'Draw', 'draw'),
+      tool(MODE.HIGHLIGHT, 'lbToolHighlight', 'Highlight', 'highlight'),
+      tool(MODE.STAMP, 'lbToolImage', 'Image', 'image'));
+    ui.style = $('div', { class: 'lb-group lb-style', role: 'group', 'aria-label': 'Colour and size', hidden: '' });
+    // colours and sizes float under the tools, so the bar never changes height
+    const tools = $('div', { class: 'lb-tools-wrap' }, toolGroup, ui.style);
+
+    ui.del = btn('lbDeletePage', 'Delete this page', 'trash', deleteCurrentPage, { cls: 'lb-danger-ghost', text: 'Delete page' });
+    const pages = $('div', { class: 'lb-group', role: 'group', 'aria-label': 'Add pages' },
+      btn('lbInsertImagePage', 'Add image page at the end', 'imagePage', insertImagePage, { text: 'Image page' }),
+      btn('lbInsertBlank', 'Add blank page at the end', 'blank', insertBlankPage, { text: 'Blank page' }),
+      ui.del);
+
+    badge = $('span', { id: 'lbSaveBadge', class: 'lb-status', role: 'status' }, '');
+    ui.exportBtn = btn('lbExport', 'Export PDF to hand in', 'export', exportPdf, { cls: 'lb-export', text: 'Export PDF' });
+    ui.menu = $('div', { class: 'lb-menu', role: 'menu', hidden: '' });
+    const menuItem = (id, label, fn) => $('button', { id, type: 'button', class: 'lb-menu-item', role: 'menuitem',
+      onclick: () => { closeMenu(); fn(); } }, label);
+    ui.menu.append(
+      menuItem('lbMenuEditable', 'Download editable copy', () => originals.download?.()),
+      menuItem('lbMenuOpen', 'Open a saved copy…', () => a().eventBus.dispatch('openfile', { source: window })),
+      menuItem('lbMenuPrint', 'Print', () => window.print()),
+      $('div', { class: 'lb-menu-sep' }),
+      menuItem('lbMenuAll', 'All logbooks', () => { location.href = '../../index.html'; }));
+    const moreBtn = btn('lbMore', 'More', 'more', e => { e.stopPropagation(); ui.menu.hidden ? openMenu() : closeMenu(); });
+    moreBtn.setAttribute('aria-haspopup', 'menu');
+    const right = $('div', { class: 'lb-right' }, badge, ui.exportBtn, $('div', { class: 'lb-menu-wrap' }, moreBtn, ui.menu));
+
+    const bar = $('header', { id: 'lbBar' },
+      $('div', { class: 'lb-row' }, ui.title, nav, zoom, tools, pages, right));
+    document.body.prepend(bar);
+    document.body.classList.add('lb-custom');
+    // pdf.js lays out the pages below var(--toolbar-height): make that our bar's height.
+    const fit = () => {
+      outer.style.setProperty('--toolbar-height', bar.offsetHeight + 'px');
+      document.documentElement.style.setProperty('--lb-bar-h', bar.offsetHeight + 'px');
+    };
+    new ResizeObserver(fit).observe(bar); fit();
+    document.addEventListener('click', e => { if (!ui.menu.hidden && !ui.menu.contains(e.target)) closeMenu(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+    syncMode(MODE.NONE);
+  }
+  const openMenu = () => { ui.menu.hidden = false; ui.menu.querySelector('button')?.focus(); };
+  const closeMenu = () => { if (ui.menu) ui.menu.hidden = true; };
+
+  function setMode(mode) {
+    const a = app();
+    if (!a?.pdfDocument) return;
+    a.eventBus.dispatch('switchannotationeditormode', { source: window, mode });
+  }
+  function syncMode(mode) {
+    ui.mode = mode;
+    for (const [m, b] of Object.entries(ui.tools || {})) {
+      const on = Number(m) === mode;
+      b.classList.toggle('lb-on', on); b.setAttribute('aria-pressed', String(on));
+    }
+    buildStyle(mode);
+  }
+  function buildStyle(mode) {
+    if (!ui.style) return;
+    const st = STYLE[mode];
+    ui.style.replaceChildren();
+    ui.style.hidden = !st;
+    if (!st) return;
+    const c = chosen[mode] ||= { color: st.colors[0], size: st.sizes ? st.sizes[1][0] : null };
+    const apply = () => {
+      const bus = app().eventBus;
+      bus.dispatch('switchannotationeditorparams', { source: window, type: st.colorParam, value: c.color });
+      if (st.sizeParam) bus.dispatch('switchannotationeditorparams', { source: window, type: st.sizeParam, value: c.size });
+      buildStyle(mode);
+    };
+    for (const col of st.colors) {
+      const s = $('button', { type: 'button', class: 'lb-swatch' + (col === c.color ? ' lb-on' : ''), title: 'Colour', 'aria-label': 'Colour ' + col,
+        onclick: () => { c.color = col; apply(); } });
+      s.style.setProperty('--sw', col);
+      ui.style.append(s);
+    }
+    if (st.sizes) {
+      ui.style.append($('span', { class: 'lb-style-sep' }));
+      for (const [v, lab] of st.sizes) ui.style.append($('button', { type: 'button', class: 'lb-size' + (v === c.size ? ' lb-on' : ''),
+        title: 'Size ' + lab, onclick: () => { c.size = v; apply(); } }, lab));
+    }
+  }
+
+  function syncPage() {
+    const a = app();
+    if (!ui.pageInput || !a?.pdfViewer) return;
+    if (document.activeElement !== ui.pageInput) ui.pageInput.value = String(a.pdfViewer.currentPageNumber || 1);
+    ui.pageCount.textContent = '/ ' + (a.pagesCount || 1);
+  }
+  function syncZoom() {
+    const a = app();
+    if (ui.zoom && a?.pdfViewer) ui.zoom.textContent = Math.round((a.pdfViewer.currentScale || 1) * 100) + '%';
+  }
+  function syncTitle() {
+    if (!ui.title) return;
+    const name = (state.id || 'Logbook').replace(/_logbook$/i, '').replace(/_/g, ' ');
+    ui.title.querySelector('.lb-name').textContent = name;
+    document.title = name + ' · NB2420 logbook';
   }
 
   function updateDeleteButton() {
-    if (!delBtn) return;
+    syncPage();
+    if (!ui.del) return;
     const info = state.pageInfo[app().pdfViewer.currentPageNumber - 1];
-    delBtn.disabled = !(info && info.added);
-    delBtn.title = delBtn.disabled ? 'Only pages you added can be deleted' : 'Delete this added page';
+    ui.del.hidden = !(info && info.added); // only pages the student added can go
   }
 
   // Slot buttons sit on top of the page, inside the reserved box.
@@ -530,6 +900,8 @@
         try { await placeInSlot(slot, await imageRecord(file)); }
         catch (err) { toast('Could not read that image (' + err.message + '). Try a JPEG or PNG.'); }
       };
+      // An empty slot covers its placeholder field: clicking anywhere in it picks an image.
+      if (!filled) box.addEventListener('click', e => { if (e.target === box) insert(); });
       const bar = $('div', { class: 'lb-slot-bar' },
         $('button', { class: 'lb-btn lb-primary', 'data-act': 'slot-insert', onclick: insert }, filled ? 'Replace image' : 'Insert image'));
       if (filled) bar.append($('button', { class: 'lb-btn', 'data-act': 'slot-remove', onclick: () => placeInSlot(slot, null) }, 'Remove'));
@@ -567,7 +939,8 @@
     await analyse();
     if (a.pdfDocument !== doc) return; // another file was opened meanwhile
     state.doc = doc;
-    buildToolbar();
+    buildBar();
+    syncTitle();
     updateDeleteButton();
     for (let i = 1; i <= a.pagesCount; i++) decoratePage(i);
     state.reopening = false;
@@ -579,15 +952,28 @@
     }
   }
 
+  // The viewer's own save writes an editable copy (form fields kept); that stays
+  // available in the menu. Ctrl+S does not download anything: work is kept in
+  // the browser, and the Export button makes the hand-in PDF.
+  const originals = {};
   function wrapSave(a) {
-    for (const m of ['save', 'download']) {
-      const orig = a[m].bind(a);
-      a[m] = async (...args) => {
-        await orig(...args);
-        state.savedHash = state.lastHash;
-        setSaveBadge('Saved to file');
-      };
-    }
+    const orig = a.download.bind(a);
+    originals.download = async () => {
+      await orig();
+      state.savedHash = state.lastHash;
+      setSaveBadge('Editable copy downloaded', 'ok');
+    };
+    a.downloadOrSave = async () => {
+      toast('Your work is saved in this browser automatically. Use Export PDF to hand it in.', 5000);
+    };
+    // pdf.js bound its Ctrl+S handler before this override, so catch the key first.
+    window.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 's' || e.key === 'S' || e.keyCode === 83)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        a.downloadOrSave();
+      }
+    }, true);
   }
 
   const ready = setInterval(() => {
@@ -596,6 +982,10 @@
     clearInterval(ready);
     a.initializedPromise.then(() => {
       wrapSave(a);
+      buildBar();
+      a.eventBus.on('scalechanging', syncZoom);
+      a.eventBus.on('pagesloaded', () => { syncPage(); syncZoom(); });
+      a.eventBus.on('annotationeditormodechanged', ({ mode }) => syncMode(mode));
       a.eventBus.on('documentloaded', () => onDocumentLoaded().catch(err => {
         console.error('[logbook]', err);
         state.reopening = false;
@@ -613,7 +1003,7 @@
     })),
     // Takes the id of a file input, so test drivers in sandboxes need not pass a function.
     setTestFile: id => { testFileHook = () => document.getElementById(id)?.files[0] || null; },
-    autosaveNow,
+    autosaveNow, exportPdf,
     insertBlankPage, insertImagePage, deleteCurrentPage,
     slotInsert: name => document.querySelector(`.lb-slot[data-slot="${name}"] [data-act="slot-insert"]`)?.click(),
   };
