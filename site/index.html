@@ -5,46 +5,85 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NB2420 Logbooks</title>
 <style>
-:root { --bg:#f9f9fb; --fg:#15141a; --muted:#5b5b66; --card:#fff; --line:#e0e0e6; --accent:#0061e0; }
-@media (prefers-color-scheme: dark) { :root { --bg:#1c1b22; --fg:#fbfbfe; --muted:#bfbfc9; --card:#2b2a33; --line:#3a3944; --accent:#73a7f3; } }
-body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
-main { max-width:720px; margin:0 auto; padding:32px 16px 48px; }
-h1 { font-size:22px; margin:0 0 4px; }
-p { color:var(--muted); margin:0 0 20px; }
-ul { list-style:none; padding:0; margin:0; display:grid; gap:8px; }
-a.item { display:flex; gap:12px; align-items:baseline; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:8px; color:inherit; text-decoration:none; }
-a.item:hover, a.item:focus-visible { border-color:var(--accent); }
-.num { font-weight:600; min-width:2.5em; color:var(--accent); }
-.how { margin-top:28px; font-size:14px; color:var(--muted); }
-.how li { margin:4px 0; }
+@font-face { font-family: "Inter"; font-weight: 100 900; font-display: swap; src: url("logbook/fonts/inter-latin-wght.woff2") format("woff2"); }
+:root {
+  --navy: #0c2340; --cyan: #00a6d6; --cyan-ink: #00799c;
+  --bg: #eef1f5; --card: #fff; --ink: #16181d; --muted: #5f6672; --line: #e1e5eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #12161d; --card: #1b212b; --ink: #eef1f5; --muted: #a3acb9; --line: #2a323e; --cyan-ink: #4cc6ea; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Inter", "Segoe UI", system-ui, sans-serif; }
+header { background: var(--navy); color: #fff; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+header .wrap { padding-top: 36px; padding-bottom: 32px; }
+.badge { display: inline-block; font: 600 12px/1 inherit; letter-spacing: .06em; padding: 6px 9px; border-radius: 6px; background: var(--cyan); color: var(--navy); }
+h1 { font-size: 26px; line-height: 1.2; margin: 14px 0 6px; font-weight: 650; }
+header p { margin: 0; color: #c9d3e0; max-width: 56ch; }
+main.wrap { padding-top: 30px; padding-bottom: 56px; }
+h2 { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 26px 0 10px; }
+h2:first-child { margin-top: 0; }
+ul.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 520px) { ul.list { grid-template-columns: 1fr; } }
+a.item { display: flex; gap: 12px; align-items: center; height: 100%; padding: 13px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
+a.item:hover, a.item:focus-visible { border-color: var(--cyan); transform: translateY(-1px); outline: none; }
+.num { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--cyan-ink); min-width: 2.2em; }
+.how { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); counter-reset: step; padding: 0; margin: 0; list-style: none; }
+.how li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; font-size: 14px; color: var(--muted); counter-increment: step; }
+.how li::before { content: counter(step); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+@media (prefers-color-scheme: dark) { .how li::before { background: var(--cyan); color: var(--navy); } }
+.how strong { color: var(--ink); font-weight: 600; }
+.note { margin-top: 22px; font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
-<main>
-  <h1>NB2420 Electronic Instrumentation: logbooks</h1>
-  <p>Open your logbook, fill it in, add photos or plots, and save it as a PDF to hand in on BrightSpace. Works in Chrome, Edge and Firefox.</p>
-  <ul id="list"><li>Loading…</li></ul>
+<header>
+  <div class="wrap">
+    <span class="badge">NB2420</span>
+    <h1>Electronic Instrumentation logbooks</h1>
+    <p>Fill in your logbook in the browser, add your graphs and photos, and export the PDF you hand in on Brightspace.</p>
+  </div>
+</header>
+<main class="wrap">
+  <div id="list"><p>Loading…</p></div>
+
+  <h2>How it works</h2>
   <ol class="how">
-    <li>Open a logbook below. Your work is kept in this browser while you go.</li>
-    <li>Type in the boxes. Use <strong>Insert image</strong> in the graph box, or the toolbar to add text, drawings, images and extra pages.</li>
-    <li>Press <strong>Ctrl+S</strong> (or the save button) to save the PDF, and hand in that file.</li>
-    <li>To keep working on a saved PDF later, open it here with the folder button or drag it onto the page.</li>
+    <li><strong>Open your logbook.</strong> Your work is saved in this browser as you type, and is there again when you come back.</li>
+    <li><strong>Fill it in.</strong> Type in the boxes and use <strong>Insert image</strong> for graphs and photos. <strong>Image page</strong> and <strong>Text page</strong> add a page at the end.</li>
+    <li><strong>Export PDF</strong> when you are done, and hand in that file on Brightspace.</li>
   </ol>
+  <p class="note">Works in Chrome, Edge and Firefox. Nothing is uploaded: your answers stay on your own computer until you hand in the PDF. The shield button in the logbook deletes what this browser kept.</p>
 </main>
 <script>
 const viewer = file => 'pdfjs/web/viewer.html?file=' + encodeURIComponent('../../logbooks/' + file);
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 fetch('logbooks/index.json').then(r => r.json()).then(list => {
   const want = new URLSearchParams(location.search).get('logbook');
   const hit = want && list.find(l => l.id === want);
   if (hit) { location.replace(viewer(hit.file)); return; }
-  const ul = document.getElementById('list');
-  ul.innerHTML = '';
+  const box = document.getElementById('list');
+  box.innerHTML = '';
+  const groups = new Map();                       // week number -> logbooks; 0 = template, last
   for (const l of list) {
-    const a = Object.assign(document.createElement('a'), { className: 'item', href: viewer(l.file) });
-    a.innerHTML = `<span class="num"></span><span class="title"></span>`;
-    a.querySelector('.num').textContent = l.id;
-    a.querySelector('.title').textContent = l.title.charAt(0).toUpperCase() + l.title.slice(1);
-    const li = document.createElement('li'); li.append(a); ul.append(li);
+    const w = parseInt(l.id, 10);
+    if (!groups.has(w)) groups.set(w, []);
+    groups.get(w).push(l);
+  }
+  const order = [...groups.keys()].sort((a, b) => (a === 0) - (b === 0) || a - b);
+  for (const w of order) {
+    const h = document.createElement('h2');
+    h.textContent = w === 0 ? 'Blank template' : 'Week ' + w;
+    const ul = Object.assign(document.createElement('ul'), { className: 'list' });
+    for (const l of groups.get(w)) {
+      const a = Object.assign(document.createElement('a'), { className: 'item', href: viewer(l.file) });
+      a.innerHTML = '<span class="num"></span><span class="title"></span>';
+      a.querySelector('.num').textContent = l.id;
+      a.querySelector('.title').textContent = cap(l.title);
+      const li = document.createElement('li'); li.append(a); ul.append(li);
+    }
+    box.append(h, ul);
   }
 }).catch(() => { document.getElementById('list').textContent = 'Could not load the list of logbooks.'; });
 </script>
