@@ -18,6 +18,9 @@ for src in sorted((book / 'manuals').rglob('*_logbook.typ')):
     if not m:
         continue
     num, title = m.group(1), m.group(2).replace('_', ' ')
+    # The renderer's cache does not track ../logbook_common.typ: always rebuild.
+    for stamp in (book / '_typst').glob(f'*/{src.stem}.typst-stamp'):
+        stamp.unlink()
     res = render(RenderRequest(source=src, root=book, preview='none', fillable=True), book)
     dest = out / f'{num}_{m.group(2)}_logbook.pdf'
     shutil.copy2(res.pdf, dest)
