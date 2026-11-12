@@ -71,7 +71,7 @@ fetch('logbooks/index.json').then(r => r.json()).then(list => {
   if (hit) { location.replace(viewer(hit.file)); return; }
   const box = document.getElementById('list');
   box.innerHTML = '';
-  const groups = new Map();                       // week number -> logbooks; week 0 = the blank template
+  const groups = new Map();                       // week number -> logbooks
   for (const l of list) {
     const w = parseInt(l.id, 10);
     if (!groups.has(w)) groups.set(w, []);
@@ -79,7 +79,7 @@ fetch('logbooks/index.json').then(r => r.json()).then(list => {
   }
   for (const w of [...groups.keys()].sort((a, b) => a - b)) {
     const h = document.createElement('h2');
-    h.textContent = w === 0 ? 'Blank template' : 'Week ' + w;
+    h.textContent = w === 0 ? 'Highlight' : 'Week ' + w;   // week 0 = highlighted logbook(s); no 0.x file, no box
     const ul = Object.assign(document.createElement('ul'), { className: 'list' });
     for (const l of groups.get(w)) {
       const a = Object.assign(document.createElement('a'), { className: 'item', href: viewer(l.file) });
@@ -88,10 +88,9 @@ fetch('logbooks/index.json').then(r => r.json()).then(list => {
       a.querySelector('.title').textContent = cap(l.title);
       const li = document.createElement('li'); li.append(a); ul.append(li);
     }
-    if (w === 0) {                                 // boxed, on top, not full width
+    if (w === 0) {                                 // highlight box, on top
       const tpl = Object.assign(document.createElement('section'), { className: 'tpl' });
-      const p = Object.assign(document.createElement('p'), { textContent: 'Only the parts every logbook shares.' });
-      tpl.append(h, ul, p);
+      tpl.append(h, ul);
       box.append(tpl);
     } else {
       box.append(h, ul);
