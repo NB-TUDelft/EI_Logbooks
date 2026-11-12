@@ -12,7 +12,6 @@ Everything runs in the student's own browser; nothing is uploaded.
 <summary>Direct link per logbook</summary>
 
 <!-- logbook-links -->
-- [0.1 Template](https://nb-tudelft.github.io/EI_Logbooks/?logbook=0.1)
 - [1.1 voltage divider](https://nb-tudelft.github.io/EI_Logbooks/?logbook=1.1)
 - [1.2 intro to oscilloscope and filters](https://nb-tudelft.github.io/EI_Logbooks/?logbook=1.2)
 - [2.1 Whack a mole](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.1)
