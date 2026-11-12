@@ -1,7 +1,7 @@
 # Tools
 
 ```
-pip install -r tools/requirements.txt
+pip install -r tools/requirements.txt     # includes the newest renderer from GitHub
 ```
 
 | Script | Does |
