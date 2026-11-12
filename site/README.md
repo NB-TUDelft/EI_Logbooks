@@ -8,7 +8,7 @@ Static files, published as-is to GitHub Pages. No server code.
 | `logbook/logbook.js`, `logbook.css` | the add-on: image boxes, extra pages, autosave, Export PDF |
 | `logbook/pdf-lib.min.js`, `fontkit.umd.min.js`, `fonts/` | pdf-lib 1.17.1, fontkit 1.1.1, Inter (for the export) |
 | `pdfjs/` | Mozilla pdf.js 6.4.299 viewer; only `web/viewer.html` is changed, to load the add-on |
-| `logbooks/` | built PDFs and `index.json`; made by `tools/build_logbooks.py`, not committed |
+| `logbooks/` | built PDFs and `index.json`; made by `tools/build_logbooks.py` (the workflow commits them), do not edit by hand |
 
 ## What the export does
 

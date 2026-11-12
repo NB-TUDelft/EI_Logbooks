@@ -34,8 +34,10 @@ Everything runs in the student's own browser; nothing is uploaded.
 
 ## How it publishes
 
-Every push to `main` runs [the workflow](.github/workflows/pages.yml): it builds
-a PDF from every template, writes the logbook list, updates the links above
-and publishes the site on GitHub Pages. This takes about a minute; the
-**Actions** tab shows the run. If it fails with "No artifacts named
+Every push to `main` runs [the workflow](.github/workflows/pages.yml) and
+publishes the site on GitHub Pages. Only when `templates/` (or the build
+tools) changed does it first rebuild the PDFs, with the newest version of the
+[renderer](https://github.com/NB-TUDelft/sphinx-typst-render), and commit them
+together with the logbook list and the links above. To rebuild by hand:
+**Actions** → *build and publish* → **Run workflow**. If it fails with "No artifacts named
 github-pages", that is GitHub, not you: press **Re-run jobs**.

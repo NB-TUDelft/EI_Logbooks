@@ -1,5 +1,4 @@
-sphinx-typst-render==0.2.5
-typst-fillable==0.0.1
+# Newest renderer from GitHub main; it brings typst and typst-fillable.
+sphinx-typst-render @ git+https://github.com/NB-TUDelft/sphinx-typst-render@main
 pymupdf
 pypdf
-typst==0.15.2

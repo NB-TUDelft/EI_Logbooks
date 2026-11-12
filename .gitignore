@@ -1,6 +1,4 @@
-# Built by tools/build_logbooks.py (locally, or by the GitHub workflow)
-site/logbooks/*.pdf
-site/logbooks/index.json
+# Staged by the renderer during a build
 templates/_typst_lib/
 
 # Local only
