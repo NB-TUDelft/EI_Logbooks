@@ -3,6 +3,7 @@
 pages:
   stage: deploy
   image: alpine:3.20
+  tags: [instance]   # TU Delft shared runner only runs jobs with this tag
   script:
     - echo "Publishing site/"
   pages:
