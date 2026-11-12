@@ -4,7 +4,9 @@ Students of NB2420 Electronic Instrumentation fill in their lab logbook in the
 browser, add graphs and photos, and export the PDF they hand in on Brightspace.
 Everything runs in the student's own browser; nothing is uploaded.
 
+<!-- site-url -->
 **Site:** https://nb-tudelft.github.io/EI_Logbooks/
+<!-- /site-url -->
 
 <details>
 <summary>Direct link per logbook</summary>

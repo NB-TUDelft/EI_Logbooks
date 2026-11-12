@@ -1,13 +1,14 @@
 """Build the logbook PDFs for the site from templates/.
 
-Usage: python tools/build_logbooks.py
+Usage: python tools/build_logbooks.py [--links-only]
 Needs: pip install sphinx-typst-render pymupdf
 
 For every templates/<n.m>_<Title>_logbook.typ it writes a fillable PDF to
 site/logbooks/, draws the printed text as outlines (tools/outline_template.py),
 writes site/logbooks/index.json (the list on the start page) and refreshes
-the list of links in README.md. The GitHub workflow runs this on every push
-that changes templates/.
+the site address and links in README.md. The GitHub workflow runs it on every
+push that changes templates/, and with --links-only (README only, no
+packages needed) on every push.
 """
 import json
 import os
@@ -16,13 +17,6 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-
-import pymupdf
-import typst
-from sphinx_typst_render._compile import RenderRequest, render, stage_field_library
-
-sys.path.insert(0, str(Path(__file__).parent))
-from outline_template import outline  # noqa: E402
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -37,6 +31,8 @@ NAME = re.compile(r'(\d+)\.(\d+)_(.+)_logbook')
 def copy_bookmarks(src, pdf):
     """The fillable step drops Typst's bookmarks; the site reads them to tag
     each image with its exercise, so put them back."""
+    import pymupdf
+    import typst
     toc = pymupdf.open(stream=typst.compile(str(src), root=str(TEMPLATES), format='pdf')).get_toc()
     doc = pymupdf.open(pdf)
     if toc and not doc.get_toc():
@@ -46,16 +42,24 @@ def copy_bookmarks(src, pdf):
 
 
 def update_readme(entries):
+    """Rewrite the site address and the link list in README.md, between the
+    <!-- site-url --> and <!-- logbook-links --> markers. Needs no packages."""
     readme = REPO / 'README.md'
     lines = [f'- [{e["id"]} {e["title"]}]({BASE_URL}?logbook={e["id"]})' for e in entries]
-    block = '<!-- logbook-links -->\n' + '\n'.join(lines) + '\n<!-- /logbook-links -->'
-    text = readme.read_text(encoding='utf-8')
-    new = re.sub(r'<!-- logbook-links -->.*?<!-- /logbook-links -->', lambda _: block, text, flags=re.S)
+    blocks = {'site-url': f'**Site:** {BASE_URL}', 'logbook-links': '\n'.join(lines)}
+    text = new = readme.read_text(encoding='utf-8')
+    for name, body in blocks.items():
+        new = re.sub(rf'<!-- {name} -->.*?<!-- /{name} -->',
+                     lambda _, n=name, b=body: f'<!-- {n} -->\n{b}\n<!-- /{n} -->', new, flags=re.S)
     if new != text:
         readme.write_text(new, encoding='utf-8')
+        print('README links updated')
 
 
 def main():
+    from sphinx_typst_render._compile import RenderRequest, render, stage_field_library
+    sys.path.insert(0, str(Path(__file__).parent))
+    from outline_template import outline
     OUT.mkdir(parents=True, exist_ok=True)
     stage_field_library(TEMPLATES)          # templates/_typst_lib/capture_field.typ
     entries, written = [], set()
@@ -83,4 +87,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if '--links-only' in sys.argv:          # README only, from the existing index.json
+        update_readme(json.loads((OUT / 'index.json').read_text(encoding='utf-8')))
+    else:
+        main()
