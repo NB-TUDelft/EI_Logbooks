@@ -1,0 +1,46 @@
+/* NB2420 logbook add-on: uses the viewer's own colour variables so it follows
+   its light and dark themes. */
+.lb-toolbar-btn { width: auto !important; padding: 0 6px !important; gap: 4px; display: inline-flex !important; align-items: center; }
+.lb-toolbar-btn svg { width: 16px; height: 16px; flex: none; }
+.lb-toolbar-btn::before { display: none !important; }
+.lb-toolbar-btn span { font-size: 12px; white-space: nowrap; }
+@media (max-width: 1100px) { .lb-toolbar-btn span { display: none; } }
+.lb-toolbar-btn:disabled { opacity: .4; }
+.lb-badge { font-size: 11px; opacity: .75; white-space: nowrap; padding: 0 6px; }
+@media (max-width: 900px) { .lb-badge { display: none; } }
+
+.lb-slot { position: absolute; z-index: 30; display: flex; align-items: flex-end; justify-content: center; pointer-events: none; }
+.lb-slot:not(.lb-filled) { outline: 2px dashed rgba(11, 127, 166, .55); outline-offset: -2px; align-items: center; }
+.lb-slot-bar { pointer-events: auto; display: flex; gap: 6px; margin: 6px; opacity: 1; transition: opacity .15s; }
+.lb-slot.lb-filled .lb-slot-bar { opacity: 0; }
+/* The filled slot stays click-through so students can draw or comment on the image. */
+.page:hover .lb-slot.lb-filled .lb-slot-bar, .lb-slot-bar:focus-within { opacity: 1; }
+body.lb-busy .lb-slot-bar, body.lb-busy #lbPageTools { pointer-events: none; opacity: .5; }
+@media print { .lb-slot, .lb-restore, .lb-toast { display: none !important; } }
+
+.lb-btn { font: 13px/1.2 system-ui, sans-serif; padding: 6px 12px; border-radius: 4px; border: 1px solid #8f8f9d; background: #fff; color: #15141a; cursor: pointer; }
+.lb-btn:hover { background: #f0f0f4; }
+.lb-btn.lb-primary { background: #0061e0; border-color: #0061e0; color: #fff; }
+.lb-btn.lb-primary:hover { background: #0250bb; }
+.lb-btn:focus-visible { outline: 2px solid #0061e0; outline-offset: 2px; }
+
+.lb-restore { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 16px; background: #fff4d6; color: #3d2e00; border-bottom: 1px solid #e0c46c; font: 13px system-ui, sans-serif; position: relative; z-index: 50; }
+.lb-restore span { flex: 1 1 260px; }
+
+.lb-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2b2a33; color: #fbfbfe; padding: 10px 16px; border-radius: 6px; font: 13px system-ui, sans-serif; z-index: 100000; max-width: calc(100vw - 32px); box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+
+.lb-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 100000; padding: 16px; }
+.lb-modal { background: #fff; color: #15141a; border-radius: 8px; padding: 18px 20px; width: min(440px, 100%); box-shadow: 0 8px 32px rgba(0,0,0,.3); font: 14px system-ui, sans-serif; }
+.lb-modal h2 { margin: 0 0 12px; font-size: 16px; }
+.lb-modal label { display: flex; flex-direction: column; gap: 6px; }
+.lb-select { font: inherit; padding: 6px; border-radius: 4px; border: 1px solid #8f8f9d; max-width: 100%; }
+.lb-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.lb-hidden-input { position: fixed; left: -9999px; }
+
+@media (prefers-color-scheme: dark) {
+  .lb-btn { background: #2b2a33; color: #fbfbfe; border-color: #6b6b75; }
+  .lb-btn:hover { background: #3a3944; }
+  .lb-modal { background: #2b2a33; color: #fbfbfe; }
+  .lb-select { background: #1c1b22; color: #fbfbfe; }
+  .lb-restore { background: #4a3c00; color: #fff3c4; border-color: #6b5800; }
+}
