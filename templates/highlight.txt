@@ -1,0 +1,3 @@
+# Logbooks shown in the Highlight box at the top of the start page, one id per line.
+# Empty (or only comments) = no box. Push, and the site updates in about a minute.
+1.2

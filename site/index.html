@@ -65,18 +65,17 @@ a.item:hover, a.item:focus-visible { border-color: var(--cyan); transform: trans
 <script>
 const viewer = file => 'pdfjs/web/viewer.html?file=' + encodeURIComponent('../../logbooks/' + file);
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-fetch('logbooks/index.json').then(r => r.json()).then(list => {
+fetch('logbooks/index.json', { cache: 'no-cache' }).then(r => r.json()).then(list => {
   const want = new URLSearchParams(location.search).get('logbook');
   const hit = want && list.find(l => l.id === want);
   if (hit) { location.replace(viewer(hit.file)); return; }
   const box = document.getElementById('list');
   box.innerHTML = '';
-  const HIGHLIGHT = ['1.2'];                      // logbooks in the Highlight box on top (they stay in their week too); [] = no box
-  const groups = new Map([[0, list.filter(l => HIGHLIGHT.includes(l.id))]]);   // week 0 = Highlight box
+  const groups = new Map([[0, list.filter(l => l.highlight)]]);   // 0 = Highlight box (templates/highlight.txt)
   for (const l of list) {
     const w = parseInt(l.id, 10);
     if (!groups.has(w)) groups.set(w, []);
-    if (w !== 0 || !HIGHLIGHT.includes(l.id)) groups.get(w).push(l);
+    if (w !== 0) groups.get(w).push(l);            // 0.x files are not listed
   }
   for (const w of [...groups.keys()].sort((a, b) => a - b)) {
     if (!groups.get(w).length) continue;

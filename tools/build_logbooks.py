@@ -5,7 +5,8 @@ Needs: pip install sphinx-typst-render pymupdf
 
 For every templates/<n.m>_<Title>_logbook.typ it writes a fillable PDF to
 site/logbooks/, draws the printed text as outlines (tools/outline_template.py),
-writes site/logbooks/index.json (the list on the start page) and refreshes
+writes site/logbooks/index.json (the list on the start page, with the ids in
+templates/highlight.txt marked) and refreshes
 the site address and links in README.md. The GitHub workflow runs it on every
 push that changes templates/, and with --links-only (README only, no
 packages needed) on every push.
@@ -41,12 +42,32 @@ def copy_bookmarks(src, pdf):
     doc.close()
 
 
+def highlighted():
+    """Ids listed in templates/highlight.txt (one per line, # starts a comment)."""
+    f = TEMPLATES / 'highlight.txt'
+    ids = [l.split('#')[0].strip() for l in f.read_text(encoding='utf-8').splitlines()] if f.exists() else []
+    return [i for i in ids if i]
+
+
+def write_index(entries):
+    """site/logbooks/index.json, with "highlight": true on the highlighted ids."""
+    hl = highlighted()
+    for e in entries:
+        e.pop('highlight', None)
+        if e['id'] in hl:
+            e['highlight'] = True
+    (OUT / 'index.json').write_text(json.dumps(entries, indent=2) + '\n', encoding='utf-8')
+
+
 def update_readme(entries):
     """Rewrite the site address and the link list in README.md, between the
     <!-- site-url --> and <!-- logbook-links --> markers. Needs no packages."""
     readme = REPO / 'README.md'
     lines = [f'- [{e["id"]} {e["title"]}]({BASE_URL}?logbook={e["id"]})' for e in entries]
-    blocks = {'site-url': f'**Site:** {BASE_URL}', 'logbook-links': '\n'.join(lines)}
+    hl = ', '.join(f'{e["id"]} {e["title"]}' for e in entries if e.get('highlight')) or 'nothing'
+    site = (f'**Site:** {BASE_URL}\n\n**Highlighted on the start page:** {hl} '
+            f'(change it in [`templates/highlight.txt`](templates/highlight.txt))')
+    blocks = {'site-url': site, 'logbook-links': '\n'.join(lines)}
     text = new = readme.read_text(encoding='utf-8')
     for name, body in blocks.items():
         new = re.sub(rf'<!-- {name} -->.*?<!-- /{name} -->',
@@ -81,13 +102,15 @@ def main():
     for old in OUT.glob('*.pdf'):           # a template that was removed or renamed
         if old.name not in written:
             old.unlink()
-    (OUT / 'index.json').write_text(json.dumps(entries, indent=2) + '\n', encoding='utf-8')
+    write_index(entries)
     update_readme(entries)
     print(len(entries), 'logbooks')
 
 
 if __name__ == '__main__':
-    if '--links-only' in sys.argv:          # README only, from the existing index.json
-        update_readme(json.loads((OUT / 'index.json').read_text(encoding='utf-8')))
+    if '--links-only' in sys.argv:          # highlight flags and README only, from the existing index.json
+        entries = json.loads((OUT / 'index.json').read_text(encoding='utf-8'))
+        write_index(entries)
+        update_readme(entries)
     else:
         main()

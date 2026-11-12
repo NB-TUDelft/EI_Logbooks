@@ -38,9 +38,9 @@ and the site updates itself about a minute later.
 
 ## Highlight
 
-Put logbook ids in `HIGHLIGHT` in `site/index.html` (now `['1.2']`), or add a
-logbook numbered `0.x`: they show in a highlighted box at the top of the start
-page. Nothing listed and no `0.x` file means no box.
+List logbook ids in [`highlight.txt`](highlight.txt), one per line (now `1.2`).
+They show in a box at the top of the start page and stay in their week too.
+Empty file: no box.
 
 ## Building blocks
 
