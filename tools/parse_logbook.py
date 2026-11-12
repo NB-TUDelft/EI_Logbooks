@@ -24,9 +24,10 @@ from pypdf import PdfReader
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
 
-ATTR = re.compile(r'(\w+)="([^"]*)"')
-TAG = re.compile(r'\[\[NB2420:(page|field|check|image)((?:\s+\w+="[^"]*")*)\]\]')
-FIELD = re.compile(r'\[\[NB2420:field name="([^"]*)"\]\](.*?)\[\[/NB2420:field\]\]', re.S)
+# Exports made on 2026-11-12 wrote the labels with ' instead of ", so accept both.
+ATTR = re.compile(r'''(\w+)=(?:"([^"]*)"|'([^']*)')''')
+TAG = re.compile(r'''\[\[NB2420:(page|field|check|image)((?:\s+\w+=(?:"[^"]*"|'[^']*'))*)\]\]''')
+FIELD = re.compile(r'''\[\[NB2420:field name=["']([^"']*)["']\]\](.*?)\[\[/NB2420:field\]\]''', re.S)
 
 
 def parse(path):
@@ -37,7 +38,7 @@ def parse(path):
     for page in reader.pages:
         text = page.extract_text() or ''
         for kind, attrs in TAG.findall(text):
-            a = dict(ATTR.findall(attrs))
+            a = {k: v1 or v2 for k, v1, v2 in ATTR.findall(attrs)}
             if kind == 'page':
                 out['pages'].append(a)
             elif kind == 'check':
@@ -50,6 +51,8 @@ def parse(path):
     if exact:                     # verbatim values (line breaks, Ω, µ) win over the page text
         exact = json.loads(exact)
         out['fields'].update(exact.get('fields', {}))
+        for name, v in exact.get('checks', {}).items():   # export value when ticked, null when not
+            out['checks'][name] = v is not None
         for slot, m in exact.get('images', {}).items():
             out['images'][slot] = m
     return out

@@ -653,13 +653,13 @@
     // extraction (pypdf, pdfplumber, PyMuPDF, pdftotext) still returns. Every
     // answer is wrapped as [[NB2420:field name="…"]] value [[/NB2420:field]].
     const fontKey = n => n.node.newFontDictionary(font.name, font.ref);
-    const safe = s => [...String(s).replace(/[\r\n]+/g, ' ').replace(/"/g, "'")]
+    const safe = s => [...String(s).replace(/[\r\n]+/g, ' ')]
       .map(c => charset.has(c.codePointAt(0)) ? c : '?').join('');
     const label = (page, key, str, x, y) => page.pushOperators(
       beginText(), setFontAndSize(key, 4), setTextRenderingMode(TextRenderingMode.Invisible),
       setTextMatrix(1, 0, 0, 1, x, y), showText(font.encodeText(safe(str))),
       setTextRenderingMode(TextRenderingMode.Fill), endText());   // Tr is text state and survives ET: reset or the answers drawn next are invisible too
-    const attr = (k, v) => v === undefined || v === null || v === '' ? '' : ` ${k}="${v}"`;
+    const attr = (k, v) => v === undefined || v === null || v === '' ? '' : ` ${k}="${String(v).replace(/"/g, "'")}"`;   // swap quotes inside values only, so the label syntax keeps its own
     const exact = { fields: {}, checks: {}, images: {} };       // the same, verbatim, in the Info dict
     const slotMeta = name => state.images['slot:' + name] || {};
     const imageLabel = (slot, m) => `[[NB2420:image slot="${slot}" filled="yes"${attr('exercise', m.exercise)}` +

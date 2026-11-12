@@ -39,7 +39,7 @@ def compare(a, b):
     for s, m in b['images'].items():
         h = (m or {}).get('sha512') or (m or {}).get('sha256')
         if h and h in ha:
-            hits.append(f'  SAME IMAGE  {ha[h]} <-> {s}  ({m.get("file", "")}, sha256 {m.get("sha256", "")[:16]}...)')
+            hits.append(f'  SAME IMAGE  {ha[h]} <-> {s}  ({m.get("file") or m.get("original_filename", "")}, sha256 {m.get("sha256", "")[:16]}...)')
     for name in sorted(set(a['fields']) & set(b['fields'])):
         if any(k in name.lower() for k in SKIP):
             continue
