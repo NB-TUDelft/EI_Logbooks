@@ -28,9 +28,10 @@ ul.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; grid
 @media (max-width: 520px) { ul.list { grid-template-columns: 1fr; } }
 a.item { display: flex; gap: 12px; align-items: center; height: 100%; padding: 13px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
 a.item:hover, a.item:focus-visible { border-color: var(--cyan); transform: translateY(-1px); outline: none; }
-.tpl { display: block; margin: 0 -15px 8px; padding: 12px 14px 14px; border: 1.5px solid var(--cyan); border-radius: 12px; background: color-mix(in srgb, var(--cyan) 7%, var(--card)); }
+.tpl { display: block; margin: 0 -32px 8px; padding: 14px 32px 16px; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--cyan) 7%, var(--card)); }
 .tpl h2 { margin: 0 0 8px; color: var(--cyan-ink); }
 .tpl ul.list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 840px) { .tpl { margin: 0 -10px 8px; padding: 12px 10px 14px; } }
 @media (max-width: 520px) { .tpl ul.list { grid-template-columns: 1fr; } }
 .tpl p { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .num { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--cyan-ink); min-width: 2.2em; }
