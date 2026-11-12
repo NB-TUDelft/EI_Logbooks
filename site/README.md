@@ -17,7 +17,7 @@ Static files, published as-is to GitHub Pages. No server code.
   (`[[NB2420:field name="..."]] answer [[/NB2420:field]]`), and stores all
   values as JSON in the PDF's Info dictionary. See [`tools/`](../tools/).
 - Hashes each inserted photo (SHA-256 and SHA-512 of the original file, before
-  it is shrunk), for the plagiarism check.
+  it is shrunk), so identical photos can be spotted.
 
 The templates' own printed text is drawn as outlines at build time, so
 Turnitin compares only what students wrote.
@@ -30,7 +30,7 @@ Turnitin compares only what students wrote.
    version reaches students straight away.
 3. Test locally (see [`templates/`](../templates/) for the commands): fill a
    logbook, insert an image, export, open the PDF, and run
-   `python tools/parse_logbook.py` on it. Check both: text the parser reads
+   `python tools/logbooks_to_dataframe.py` on its folder. Check both: text the tool reads
    can still be invisible on the page.
 
 For automated tests, `nb2420Logbook.setTestFile('<id of an input type=file>')`

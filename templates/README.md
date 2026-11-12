@@ -55,10 +55,10 @@ All of them are defined in [`logbook_common.typ`](logbook_common.typ).
   photo is scaled into the box, so the page layout never shifts. 150 to 200 pt
   high suits a graph.
 - **Field ids** are lowercase, unique within the logbook, and are what the
-  reading scripts report (`fc_meas: "1.6 kHz"`). Keep them the same between
+  column names in the submissions table (`tools/`). Keep them the same between
   years if you want to compare years.
 - Do not start your own ids with `img_` (reserved for image boxes), and do not
-  remove `name`, `partner`, `date`, `group` (the plagiarism check uses them).
+  remove `name`, `partner`, `date`, `group`.
 - Size boxes in `pt`, never with a percentage.
 - Build locally to check before pushing (needs Python):
 

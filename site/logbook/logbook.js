@@ -660,7 +660,7 @@
       setTextMatrix(1, 0, 0, 1, x, y), showText(font.encodeText(safe(str))),
       setTextRenderingMode(TextRenderingMode.Fill), endText());   // Tr is text state and survives ET: reset or the answers drawn next are invisible too
     const attr = (k, v) => v === undefined || v === null || v === '' ? '' : ` ${k}="${String(v).replace(/"/g, "'")}"`;   // swap quotes inside values only, so the label syntax keeps its own
-    const exact = { fields: {}, checks: {}, images: {} };       // the same, verbatim, in the Info dict
+    const exact = { pages: [], fields: {}, checks: {}, images: {} };       // the same, verbatim, in the Info dict
     const slotMeta = name => state.images['slot:' + name] || {};
     const imageLabel = (slot, m) => `[[NB2420:image slot="${slot}" filled="yes"${attr('exercise', m.exercise)}` +
       `${attr('file', m.original_filename)}${attr('sha256', m.sha256)}${attr('sha512', m.sha512)}]]`;
@@ -670,6 +670,7 @@
       const { height: PH } = page.getSize();
       const info = state.pageInfo[pageIndex] || {};
       label(page, key, `[[NB2420:page n="${pageIndex + 1}"${attr('kind', info.added ? info.kind : 'template')}${attr('exercise', info.exercise)}]]`, 2, PH - 6);
+      exact.pages.push({ n: pageIndex + 1, kind: info.added ? info.kind : 'template', exercise: info.exercise || null });
       const annots = page.node.lookup(N('Annots'));
       const list = annots instanceof PDFArray ? annots : ctx.obj([]);
       const keep = [], ops = [], texts = [], labels = [];

@@ -30,7 +30,7 @@ Everything runs in the student's own browser; nothing is uploaded.
 |--------|------|------------------|
 | [`templates/`](templates/) | the logbooks, as Typst files | adding or changing a logbook |
 | [`site/`](site/) | the website | changing how the site works |
-| [`tools/`](tools/) | build script, reading and plagiarism scripts | checking handed-in PDFs |
+| [`tools/`](tools/) | all submissions into one table, and the build scripts | reading handed-in logbooks |
 
 ## How it publishes
 
