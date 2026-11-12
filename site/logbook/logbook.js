@@ -1,11 +1,13 @@
 /* NB2420 logbook add-on for the pdf.js viewer.
  *
- * Adds to the stock viewer (which already does forms, text, draw, highlight,
- * free images, comments, signatures, print and save):
+ * Uses the stock viewer's forms, Draw tool and print; its free text,
+ * highlight, image, comment and signature tools are off, so every answer
+ * lives in a known field. Adds:
  *   - image slots: an "Insert image" button on each reserved graph box; the
  *     image is fitted inside the box and tagged with its exercise
  *   - a custom toolbar, and an Export button that writes a flattened hand-in PDF
- *   - appending blank pages and image pages at the end, and
+ *     with invisible [[NB2420:...]] labels around every answer (for parsing)
+ *   - appending text pages (one big field) and image pages at the end, and
  *     deleting pages that were added (the logbook's own pages are locked)
  *   - autosave in the browser (IndexedDB), with an offer to restore
  *
@@ -18,7 +20,8 @@
   'use strict';
   const { PDFDocument, PDFName, PDFString, PDFHexString, PDFBool, PDFArray, PDFDict, PDFStream, PDFRef,
           StandardFonts, rgb, drawImage: opDrawImage, pushGraphicsState, popGraphicsState,
-          concatTransformationMatrix, drawObject, degrees } = PDFLib;
+          concatTransformationMatrix, drawObject, degrees,
+          beginText, endText, setFontAndSize, setTextRenderingMode, TextRenderingMode, setTextMatrix, showText } = PDFLib;
 
   const GENERAL = 'General / other';
   const A4 = [595.28, 841.89];
@@ -32,8 +35,11 @@
   document.addEventListener('webviewerloaded', () => {
     const o = window.PDFViewerApplicationOptions;
     o.set('disablePreferences', true);      // same tools for every student
-    o.set('enableComment', true);           // as in Firefox
-    o.set('enableSignatureEditor', true);   // as in Firefox
+    // Nothing that drops loose content on arbitrary spots of a page: answers go
+    // into the logbook's fields, so the exported PDF can be read by code.
+    o.set('enableComment', false);
+    o.set('enableSignatureEditor', false);
+    o.set('enableHighlightFloatingButton', false);
     o.set('enableScripting', false);        // logbooks need no PDF scripts
     o.set('viewerCssTheme', 1);             // same light look in every browser and OS theme
     o.set('sidebarViewOnLoad', 0);          // no thumbnail sidebar: our own bar replaces the chrome
@@ -95,14 +101,18 @@
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
     ctx.drawImage(bmp, 0, 0, w, h);
     const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
-    let sha256 = null;
+    // Hashes of the file as the student picked it, before resizing and JPEG
+    // re-encoding, so the same photo gives the same hash in every logbook.
+    let sha256 = null, sha512 = null;
     try {
-      const d = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-      sha256 = [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+      const raw = await file.arrayBuffer();
+      const hex = async alg => [...new Uint8Array(await crypto.subtle.digest(alg, raw))]
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+      sha256 = await hex('SHA-256'); sha512 = await hex('SHA-512');
     } catch (_) { /* optional */ }
     return {
       bytes: new Uint8Array(await blob.arrayBuffer()), w, h,
-      meta: { original_filename: file.name, original_width: bmp.width, original_height: bmp.height, sha256, inserted: nowIso() },
+      meta: { original_filename: file.name, original_width: bmp.width, original_height: bmp.height, sha256, sha512, inserted: nowIso() },
     };
   }
   const contain = (w, h, bw, bh) => { const s = Math.min(bw / w, bh / h); return { w: w * s, h: h * s }; };
@@ -214,7 +224,12 @@
         try { await reopen(rec.bytes); toast('Work restored.'); }
         catch (err) { toast('Could not restore: ' + err.message); }
       } }, 'Restore my work'),
-      $('button', { class: 'lb-btn', onclick: async () => { done(); await idb.del(id); } }, 'Start fresh'));
+      $('button', { class: 'lb-btn', onclick: async () => {
+        if (!await askConfirm('Start fresh?',
+          `Your saved work from ${label} will be deleted from this browser and cannot be recovered.`,
+          'Start fresh')) return;
+        done(); await idb.del(id);
+      } }, 'Start fresh'));
     document.body.append(bar);
   }
 
@@ -414,16 +429,26 @@
   }
 
   // Added pages always go at the end of the logbook (no reordering).
+  // A text page is one big text field, so what is written on it stays readable by code.
   async function insertBlankPage() {
     const a = app();
     const at = a.pagesCount;
     const exercise = exerciseForPage(a.pdfViewer.currentPageNumber - 1);
     await transform(async pl => {
-      const size = pl.getPage(0).getSize();
-      const page = pl.insertPage(at, [size.width, size.height]);
-      const font = await pl.embedFont(StandardFonts.Helvetica);
-      page.drawText(ansi('Added page  |  ' + exercise), { x: 40, y: size.height - 30, size: 8, font, color: rgb(0.45, 0.45, 0.45) });
-      markAdded(page, 'blank', exercise);
+      const { width: W, height: H } = pl.getPage(0).getSize();
+      const page = pl.insertPage(at, [W, H]);
+      const bold = await pl.embedFont(StandardFonts.HelveticaBold);
+      const regular = await pl.embedFont(StandardFonts.Helvetica);
+      const M = 40;
+      page.drawText(ansi('Text for: ' + exercise), { x: M, y: H - M - 12, size: 12, font: bold, maxWidth: W - 2 * M });
+      page.drawText('Added page', { x: M, y: H - M - 28, size: 8, font: regular, color: rgb(0.45, 0.45, 0.45) });
+      const id = 'added_text_' + Date.now().toString(36);
+      const field = pl.getForm().createTextField(id);
+      field.enableMultiline();
+      field.addToPage(page, { x: M, y: M, width: W - 2 * M, height: H - 2 * M - 40, font: regular, borderWidth: 0.5,
+                              borderColor: rgb(0.6, 0.6, 0.6), backgroundColor: rgb(0.97, 0.98, 0.98) });
+      field.setFontSize(10);
+      markAdded(page, 'text', exercise);
     }, at + 1);
   }
 
@@ -624,12 +649,31 @@
       }
       return parts.join('.');
     };
-    for (const page of pl.getPages()) {
+    // Invisible labels: text in render mode 3 (not painted), which text
+    // extraction (pypdf, pdfplumber, PyMuPDF, pdftotext) still returns. Every
+    // answer is wrapped as [[NB2420:field name="…"]] value [[/NB2420:field]].
+    const fontKey = n => n.node.newFontDictionary(font.name, font.ref);
+    const safe = s => [...String(s).replace(/[\r\n]+/g, ' ').replace(/"/g, "'")]
+      .map(c => charset.has(c.codePointAt(0)) ? c : '?').join('');
+    const label = (page, key, str, x, y) => page.pushOperators(
+      beginText(), setFontAndSize(key, 4), setTextRenderingMode(TextRenderingMode.Invisible),
+      setTextMatrix(1, 0, 0, 1, x, y), showText(font.encodeText(safe(str))), endText());
+    const attr = (k, v) => v === undefined || v === null || v === '' ? '' : ` ${k}="${v}"`;
+    const exact = { fields: {}, checks: {}, images: {} };       // the same, verbatim, in the Info dict
+    const slotMeta = name => state.images['slot:' + name] || {};
+    const imageLabel = (slot, m) => `[[NB2420:image slot="${slot}" filled="yes"${attr('exercise', m.exercise)}` +
+      `${attr('file', m.original_filename)}${attr('sha256', m.sha256)}${attr('sha512', m.sha512)}]]`;
+
+    for (const [pageIndex, page] of pl.getPages().entries()) {
+      const key = fontKey(page);
+      const { height: PH } = page.getSize();
+      const info = state.pageInfo[pageIndex] || {};
+      label(page, key, `[[NB2420:page n="${pageIndex + 1}"${attr('kind', info.added ? info.kind : 'template')}${attr('exercise', info.exercise)}]]`, 2, PH - 6);
       const annots = page.node.lookup(N('Annots'));
-      if (!(annots instanceof PDFArray)) continue;
-      const keep = [], ops = [], texts = [];
-      for (let i = 0; i < annots.size(); i++) {
-        const ref = annots.get(i);
+      const list = annots instanceof PDFArray ? annots : ctx.obj([]);
+      const keep = [], ops = [], texts = [], labels = [];
+      for (let i = 0; i < list.size(); i++) {
+        const ref = list.get(i);
         const d = ctx.lookup(ref);
         if (!(d instanceof PDFDict)) continue;
         const sub = String(d.lookup(N('Subtype')) || '');
@@ -637,15 +681,41 @@
         if (sub === '/Popup') continue;
         const flags = d.lookup(N('F')); const f = flags ? flags.asNumber() : 0;
         if (f & 2 || f & 32) continue;                            // hidden / no-view
-        if (sub === '/Widget' && fieldName(d).startsWith('img_')) continue; // unused image slot
+        const rectHere = nums(d.lookup(N('Rect')));
+        const top = r => [Math.min(r[0], r[2]), Math.max(r[1], r[3]) - 4];
+        if (sub === '/Widget' && fieldName(d).startsWith('img_')) {         // image slot left empty
+          const slot = fieldName(d).slice(4);
+          exact.images[slot] = null;
+          if (rectHere) labels.push([`[[NB2420:image slot="${slot}" filled="no"]]`, ...top(rectHere)]);
+          continue;
+        }
         if (sub === '/Widget' && String(inherit(d, 'FT')) === '/Tx') {      // text field: draw its value
           const value = textOf(inherit(d, 'V'));
-          const ffv = inherit(d, 'Ff'), qv = inherit(d, 'Q'), rect = nums(d.lookup(N('Rect')));
+          const ffv = inherit(d, 'Ff'), qv = inherit(d, 'Q');
           const ff = ffv ? ffv.asNumber() : 0;
-          if (value.trim() && rect && !(ff & 8192)) {
-            texts.push([rect, value, textOf(inherit(d, 'DA') || daDefault), ff, qv ? qv.asNumber() : 0]);
+          if (rectHere && !(ff & 8192)) {
+            const name = fieldName(d);
+            exact.fields[name] = value;
+            texts.push([rectHere, value, textOf(inherit(d, 'DA') || daDefault), ff, qv ? qv.asNumber() : 0, name]);
+            const pm = state.images['page:' + name];                         // notes field of an image page
+            if (pm) {
+              exact.images['page:' + name] = pm;
+              labels.push([imageLabel('page:' + name, pm), Math.min(rectHere[0], rectHere[2]), Math.max(rectHere[1], rectHere[3]) + 14]);
+            }
           }
           continue;
+        }
+        if (sub === '/Widget' && String(inherit(d, 'FT')) === '/Btn') {     // checkbox / radio
+          const name = fieldName(d), as = d.lookup(N('AS'));
+          const on = !!as && String(as) !== '/Off';
+          exact.checks[name] = on ? String(as).slice(1) : null;
+          if (rectHere) labels.push([`[[NB2420:check name="${name}" checked="${on ? 'yes' : 'no'}"]]`, ...top(rectHere)]);
+        }
+        const nm = textOf(d.lookup(N('NM')));
+        if (nm.startsWith('nb2420-slot:') && rectHere) {                 // image in a slot
+          const slot = nm.slice('nb2420-slot:'.length), m = slotMeta(slot);
+          exact.images[slot] = m;
+          labels.push([imageLabel(slot, m), ...top(rectHere)]);
         }
         const ap = d.lookup(N('AP'));
         if (!(ap instanceof PDFDict)) continue;
@@ -675,10 +745,18 @@
       }
       if (keep.length) page.node.set(N('Annots'), ctx.obj(keep)); else page.node.delete(N('Annots'));
       if (ops.length) page.pushOperators(...ops);
-      for (const [rect, value, da, ff, q] of texts) drawFieldText(page, font, charset, rect, value, da, ff, q);
+      for (const [str, x, y] of labels) label(page, key, str, x, y);
+      for (const [rect, value, da, ff, q, name] of texts) {
+        const x1 = Math.min(rect[0], rect[2]), x2 = Math.max(rect[0], rect[2]);
+        const y1 = Math.min(rect[1], rect[3]), y2 = Math.max(rect[1], rect[3]);
+        label(page, key, `[[NB2420:field name="${name}"]]`, x1, y2 - 4);
+        if (value.trim()) drawFieldText(page, font, charset, rect, value, da, ff, q);
+        label(page, key, '[[/NB2420:field]]', x2 - 20, y1 + 1);
+      }
     }
     pl.catalog.delete(N('AcroForm'));
     pl.getInfoDict().set(N('LogbookExported'), PDFHexString.fromText(nowIso()));
+    pl.getInfoDict().set(N('LogbookFields'), PDFHexString.fromText(JSON.stringify(exact)));
     return pl.save({ updateFieldAppearances: false });
   }
 
@@ -723,10 +801,7 @@
     minus: `<path ${S} d="M5 10h10"/>`,
     plus: `<path ${S} d="M10 5v10M5 10h10"/>`,
     select: `<path ${S} d="M5 3.5l10 6.2-4.4 1.1-2.1 4.2z"/>`,
-    text: `<path ${S} d="M4.5 5V3.8h11V5M10 3.8v12.4M7.8 16.2h4.4"/>`,
     draw: `<path ${S} d="M13.5 3.8l2.7 2.7-8.8 8.8-3.6.9.9-3.6z"/><path ${S} d="M11.6 5.7l2.7 2.7"/>`,
-    highlight: `<path ${S} d="M7 12.5l6.8-6.8 2 2L9 14.5H7z"/><path ${S} d="M3.5 16.5h7"/>`,
-    image: `<rect ${S} x="3" y="4" width="14" height="12" rx="2"/><circle cx="7.5" cy="8.3" r="1.4" fill="currentColor"/><path ${S} d="M3.5 14.5l4-3.8 3 2.8 2-1.8 4 3.3"/>`,
     blank: `<path ${S} d="M5 2.8h6.5l3.5 3.5v10.9H5z"/><path ${S} d="M10 9v5M7.5 11.5h5"/>`,
     imagePage: `<path ${S} d="M5 2.8h6.5l3.5 3.5v10.9H5z"/><path ${S} d="M6.8 15l2.4-2.6 1.8 1.7 1.3-1.2 1.4 1.5"/><circle cx="8.6" cy="9.4" r="1" fill="currentColor"/>`,
     trash: `<path ${S} d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>`,
@@ -737,14 +812,13 @@
   const icon = name => { const s = svgIcon(ICONS[name]); s.setAttribute('viewBox', '0 0 20 20'); return s; };
 
   // pdf.js editor modes and their parameters (see AnnotationEditorType / ParamsType in pdf.mjs)
-  const MODE = { NONE: 0, FREETEXT: 3, HIGHLIGHT: 9, STAMP: 13, INK: 15 };
-  const PARAM = { FREETEXT_SIZE: 11, FREETEXT_COLOR: 12, INK_COLOR: 21, INK_THICKNESS: 22, HIGHLIGHT_COLOR: 31 };
+  // Only Select and Draw: free text boxes, highlights and stamps put loose
+  // content anywhere on a page, which code reading the export cannot place.
+  const MODE = { NONE: 0, INK: 15 };
+  const PARAM = { INK_COLOR: 21, INK_THICKNESS: 22 };
   const STYLE = {
-    [MODE.FREETEXT]: { colorParam: PARAM.FREETEXT_COLOR, colors: ['#1d1d1f', '#1f5fd1', '#c8321e', '#178a4c'],
-                       sizeParam: PARAM.FREETEXT_SIZE, sizes: [[10, 'S'], [14, 'M'], [20, 'L']] },
-    [MODE.INK]:      { colorParam: PARAM.INK_COLOR, colors: ['#1d1d1f', '#1f5fd1', '#c8321e', '#178a4c'],
-                       sizeParam: PARAM.INK_THICKNESS, sizes: [[1, 'S'], [2, 'M'], [4, 'L']] },
-    [MODE.HIGHLIGHT]: { colorParam: PARAM.HIGHLIGHT_COLOR, colors: ['#FFFF98', '#53FFBC', '#80EBFF', '#FFCBE6'] },
+    [MODE.INK]: { colorParam: PARAM.INK_COLOR, colors: ['#1d1d1f', '#1f5fd1', '#c8321e', '#178a4c'],
+                  sizeParam: PARAM.INK_THICKNESS, sizes: [[1, 'S'], [2, 'M'], [4, 'L']] },
   };
   const chosen = {}; // per mode: {color, size}
 
@@ -790,10 +864,7 @@
     };
     const toolGroup = $('div', { class: 'lb-group lb-tools', role: 'toolbar', 'aria-label': 'Tools' },
       tool(MODE.NONE, 'lbToolSelect', 'Select', 'select'),
-      tool(MODE.FREETEXT, 'lbToolText', 'Text', 'text'),
-      tool(MODE.INK, 'lbToolDraw', 'Draw', 'draw'),
-      tool(MODE.HIGHLIGHT, 'lbToolHighlight', 'Highlight', 'highlight'),
-      tool(MODE.STAMP, 'lbToolImage', 'Image', 'image'));
+      tool(MODE.INK, 'lbToolDraw', 'Draw', 'draw'));
     ui.style = $('div', { class: 'lb-group lb-style', role: 'group', 'aria-label': 'Colour and size', hidden: '' });
     // colours and sizes float under the tools, so the bar never changes height
     const tools = $('div', { class: 'lb-tools-wrap' }, toolGroup, ui.style);
@@ -801,7 +872,7 @@
     ui.del = btn('lbDeletePage', 'Delete this page', 'trash', deleteCurrentPage, { cls: 'lb-danger-ghost', text: 'Delete page' });
     const pages = $('div', { class: 'lb-group', role: 'group', 'aria-label': 'Add pages' },
       btn('lbInsertImagePage', 'Add image page at the end', 'imagePage', insertImagePage, { text: 'Image page' }),
-      btn('lbInsertBlank', 'Add blank page at the end', 'blank', insertBlankPage, { text: 'Blank page' }),
+      btn('lbInsertBlank', 'Add a text page at the end', 'blank', insertBlankPage, { text: 'Text page' }),
       ui.del);
 
     badge = $('span', { id: 'lbSaveBadge', class: 'lb-status', role: 'status' }, '');

@@ -36,6 +36,33 @@ It must be served over http(s) (not opened as `file://`).
 Access control (TU login only, password) is the host's job; the site itself
 is public to whoever can reach it.
 
+## Reading exported logbooks with code
+
+Export PDF writes a flattened PDF with invisible labels around every answer
+(text in render mode 3: not painted, but returned by pypdf, pdfplumber,
+PyMuPDF and pdftotext):
+
+```
+[[NB2420:page n="3" kind="template"]]
+[[NB2420:field name="preparation"]] student text [[/NB2420:field]]
+[[NB2420:check name="..." checked="yes"]]
+[[NB2420:image slot="graph" filled="yes" exercise="..." file="..."]]
+```
+
+Added pages have `kind="text"` (one big field) or `kind="image"`. The Info key
+`/LogbookFields` holds the same values verbatim as JSON.
+`python tools/parse_logbook.py exported.pdf` prints it all as JSON.
+
+Image labels carry `sha256` and `sha512` of the photo file as the student
+picked it, hashed in the browser before resizing and compression, so the same
+photo gives the same hash in every logbook. Plagiarism check across a batch:
+`python tools/compare_logbooks.py *.pdf` lists pairs with the same image hash
+or identical/near-identical answers (name, partner, date, group ignored).
+
+Students can only write into the logbook's fields, draw, insert images into
+slots, and add text or image pages at the end; there are no free text boxes,
+highlights or stamps to land in random places.
+
 ## Updating the logbooks
 
 ```
