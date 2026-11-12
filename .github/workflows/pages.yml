@@ -63,6 +63,8 @@ jobs:
             git push
           fi
 
+      - name: Leave the folder README off the website
+        run: rm -f site/README.md
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }
       - id: deploy
