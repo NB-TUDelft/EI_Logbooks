@@ -657,7 +657,8 @@
       .map(c => charset.has(c.codePointAt(0)) ? c : '?').join('');
     const label = (page, key, str, x, y) => page.pushOperators(
       beginText(), setFontAndSize(key, 4), setTextRenderingMode(TextRenderingMode.Invisible),
-      setTextMatrix(1, 0, 0, 1, x, y), showText(font.encodeText(safe(str))), endText());
+      setTextMatrix(1, 0, 0, 1, x, y), showText(font.encodeText(safe(str))),
+      setTextRenderingMode(TextRenderingMode.Fill), endText());   // Tr is text state and survives ET: reset or the answers drawn next are invisible too
     const attr = (k, v) => v === undefined || v === null || v === '' ? '' : ` ${k}="${v}"`;
     const exact = { fields: {}, checks: {}, images: {} };       // the same, verbatim, in the Info dict
     const slotMeta = name => state.images['slot:' + name] || {};
