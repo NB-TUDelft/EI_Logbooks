@@ -28,6 +28,10 @@ ul.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; grid
 @media (max-width: 520px) { ul.list { grid-template-columns: 1fr; } }
 a.item { display: flex; gap: 12px; align-items: center; height: 100%; padding: 13px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
 a.item:hover, a.item:focus-visible { border-color: var(--cyan); transform: translateY(-1px); outline: none; }
+.tpl { display: inline-block; max-width: 100%; margin-bottom: 6px; padding: 12px 14px 14px; border: 1.5px solid var(--cyan); border-radius: 12px; background: color-mix(in srgb, var(--cyan) 7%, var(--card)); }
+.tpl h2 { margin: 0 0 8px; color: var(--cyan-ink); }
+.tpl ul.list { grid-template-columns: minmax(240px, 320px); }
+.tpl p { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .num { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--cyan-ink); min-width: 2.2em; }
 .how { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); counter-reset: step; padding: 0; margin: 0; list-style: none; }
 .how li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; font-size: 14px; color: var(--muted); counter-increment: step; }
@@ -65,14 +69,13 @@ fetch('logbooks/index.json').then(r => r.json()).then(list => {
   if (hit) { location.replace(viewer(hit.file)); return; }
   const box = document.getElementById('list');
   box.innerHTML = '';
-  const groups = new Map();                       // week number -> logbooks; 0 = template, last
+  const groups = new Map();                       // week number -> logbooks; week 0 = the blank template
   for (const l of list) {
     const w = parseInt(l.id, 10);
     if (!groups.has(w)) groups.set(w, []);
     groups.get(w).push(l);
   }
-  const order = [...groups.keys()].sort((a, b) => (a === 0) - (b === 0) || a - b);
-  for (const w of order) {
+  for (const w of [...groups.keys()].sort((a, b) => a - b)) {
     const h = document.createElement('h2');
     h.textContent = w === 0 ? 'Blank template' : 'Week ' + w;
     const ul = Object.assign(document.createElement('ul'), { className: 'list' });
@@ -83,7 +86,14 @@ fetch('logbooks/index.json').then(r => r.json()).then(list => {
       a.querySelector('.title').textContent = cap(l.title);
       const li = document.createElement('li'); li.append(a); ul.append(li);
     }
-    box.append(h, ul);
+    if (w === 0) {                                 // boxed, on top, not full width
+      const tpl = Object.assign(document.createElement('section'), { className: 'tpl' });
+      const p = Object.assign(document.createElement('p'), { textContent: 'Only the parts every logbook shares.' });
+      tpl.append(h, ul, p);
+      box.append(tpl);
+    } else {
+      box.append(h, ul);
+    }
   }
 }).catch(() => { document.getElementById('list').textContent = 'Could not load the list of logbooks.'; });
 </script>
