@@ -130,13 +130,32 @@
       get: k => tx('readonly', s => s.get(k)).catch(() => null),
       put: (k, v) => tx('readwrite', s => s.put(v, k)), // throws, so autosave can say it failed
       del: k => tx('readwrite', s => s.delete(k)).catch(() => null),
+      // Privacy: remove saved work. If deleting fails, overwrite it with nothing first.
+      async wipe(k) {
+        try { await tx('readwrite', s => s.delete(k)); } catch (_) {
+          await tx('readwrite', s => s.put({ bytes: new Uint8Array(0), time: null, wiped: true }, k)).catch(() => {});
+          await tx('readwrite', s => s.delete(k)).catch(() => {});
+        }
+        return !(await tx('readonly', s => s.get(k)).catch(() => null))?.bytes?.length;
+      },
+      async wipeAll() {
+        let keys = [];
+        try { keys = await tx('readonly', s => s.getAllKeys()); } catch (_) {}
+        try { await tx('readwrite', s => s.clear()); } catch (_) {
+          for (const k of keys) await this.wipe(k);
+        }
+        let left = [];
+        try { left = await tx('readonly', s => s.getAllKeys()); } catch (_) {}
+        for (const k of left) await this.wipe(k);
+        return true;
+      },
     };
   })();
 
   async function autosaveNow(fromTransform = false) {
     const a = app(), doc = a && a.pdfDocument;
     if (!doc || !state.id || doc !== state.doc) return; // id not (yet) for this document
-    if ((state.busy && !fromTransform) || state.restorePending || state.otherTab) return;
+    if ((state.busy && !fromTransform) || state.restorePending || state.otherTab || state.wiped) return;
     if (state.opCount === 0 && doc.annotationStorage.size === 0) return; // nothing changed yet
     const hash = doc.annotationStorage.serializable.hash + ':' + state.opCount;
     if (hash === state.lastHash) return;
@@ -159,7 +178,7 @@
 
   // Leaving with changes that were never saved to a file: ask first.
   window.addEventListener('beforeunload', e => {
-    if (state.lastHash && state.lastHash !== state.savedHash && state.opCountOrEdits()) {
+    if (!state.wiped && state.lastHash && state.lastHash !== state.savedHash && state.opCountOrEdits()) {
       e.preventDefault(); e.returnValue = '';
     }
   });
@@ -712,6 +731,7 @@
     imagePage: `<path ${S} d="M5 2.8h6.5l3.5 3.5v10.9H5z"/><path ${S} d="M6.8 15l2.4-2.6 1.8 1.7 1.3-1.2 1.4 1.5"/><circle cx="8.6" cy="9.4" r="1" fill="currentColor"/>`,
     trash: `<path ${S} d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>`,
     export: `<path ${S} d="M10 3.5v9M6.3 8.8 10 12.5l3.7-3.7M4 15v1.5h12V15"/>`,
+    shield: `<path ${S} d="M10 2.8l5.8 2.2v4.6c0 3.6-2.5 6.3-5.8 7.6-3.3-1.3-5.8-4-5.8-7.6V5z"/><path ${S} d="M7.6 10l1.7 1.7 3.2-3.4"/>`,
     more: '<circle cx="5" cy="10" r="1.4" fill="currentColor"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/><circle cx="15" cy="10" r="1.4" fill="currentColor"/>',
   };
   const icon = name => { const s = svgIcon(ICONS[name]); s.setAttribute('viewBox', '0 0 20 20'); return s; };
@@ -795,9 +815,20 @@
       menuItem('lbMenuPrint', 'Print', () => window.print()),
       $('div', { class: 'lb-menu-sep' }),
       menuItem('lbMenuAll', 'All logbooks', () => { location.href = '../../index.html'; }));
-    const moreBtn = btn('lbMore', 'More', 'more', e => { e.stopPropagation(); ui.menu.hidden ? openMenu() : closeMenu(); });
+    const moreBtn = btn('lbMore', 'More', 'more', e => { e.stopPropagation(); const open = ui.menu.hidden; closeMenu(); if (open) openMenu(); });
     moreBtn.setAttribute('aria-haspopup', 'menu');
-    const right = $('div', { class: 'lb-right' }, badge, ui.exportBtn, $('div', { class: 'lb-menu-wrap' }, moreBtn, ui.menu));
+    ui.pmenu = $('div', { class: 'lb-menu lb-privacy-menu', role: 'menu', hidden: '' },
+      $('div', { class: 'lb-menu-note' }, 'Your work is stored only in this browser on this device.'),
+      menuItem('lbClearThis', 'Delete saved work for this logbook…', () => clearSaved(false)),
+      menuItem('lbClearAll', 'Delete saved work for all logbooks…', () => clearSaved(true)));
+    ui.pmenu.querySelectorAll('.lb-menu-item').forEach(b => b.classList.add('lb-menu-danger'));
+    const shieldBtn = btn('lbPrivacy', 'Privacy and stored data', 'shield', e => {
+      e.stopPropagation(); const open = ui.pmenu.hidden; closeMenu(); if (open) { ui.pmenu.hidden = false; ui.pmenu.querySelector('button')?.focus(); }
+    }, { cls: 'lb-privacy' });
+    shieldBtn.setAttribute('aria-haspopup', 'menu');
+    const right = $('div', { class: 'lb-right' }, badge, ui.exportBtn,
+      $('div', { class: 'lb-menu-wrap' }, moreBtn, ui.menu),
+      $('div', { class: 'lb-menu-wrap' }, shieldBtn, ui.pmenu));
 
     const bar = $('header', { id: 'lbBar' },
       $('div', { class: 'lb-row' }, ui.title, nav, zoom, tools, pages, right));
@@ -809,12 +840,29 @@
       document.documentElement.style.setProperty('--lb-bar-h', bar.offsetHeight + 'px');
     };
     new ResizeObserver(fit).observe(bar); fit();
-    document.addEventListener('click', e => { if (!ui.menu.hidden && !ui.menu.contains(e.target)) closeMenu(); });
+    document.addEventListener('click', e => {
+      if (!ui.menu.contains(e.target) && !ui.pmenu.contains(e.target)) closeMenu();
+    });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
     syncMode(MODE.NONE);
   }
   const openMenu = () => { ui.menu.hidden = false; ui.menu.querySelector('button')?.focus(); };
-  const closeMenu = () => { if (ui.menu) ui.menu.hidden = true; };
+  const closeMenu = () => { if (ui.menu) ui.menu.hidden = true; if (ui.pmenu) ui.pmenu.hidden = true; };
+
+  // Privacy: delete the work this browser keeps, after two confirmations.
+  async function clearSaved(all) {
+    const what = all ? 'all logbooks' : 'this logbook';
+    if (!await askConfirm(`Delete saved work for ${what}?`,
+      `This removes your progress for ${what} from this browser. Anything you have not exported as a PDF will be lost.`,
+      'Continue')) return;
+    if (!await askConfirm('Are you sure?',
+      `Your progress for ${what} cannot be recovered afterwards. Close other tabs with a logbook first, or they will save it again.`,
+      all ? 'Delete everything' : 'Delete my work')) return;
+    state.wiped = true;
+    const ok = all ? await idb.wipeAll() : await idb.wipe(state.id);
+    toast(ok ? `Saved work for ${what} deleted. Reloading…` : 'Some saved work could not be removed.', 4000);
+    if (ok) setTimeout(() => location.reload(), 1200);
+  }
 
   function setMode(mode) {
     const a = app();

@@ -104,6 +104,10 @@ body.lb-custom { background: var(--lb-canvas); }
 .lb-menu[hidden] { display: none; }
 .lb-menu-item { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 9px 10px; border-radius: 8px; cursor: pointer; font: 500 13px/1.2 var(--lb-font); color: var(--lb-ink); }
 .lb-menu-item:hover { background: var(--lb-chip); }
+.lb-privacy-menu { min-width: 280px; }
+.lb-menu-note { padding: 8px 10px 6px; font: 400 12px/1.4 var(--lb-font); color: #5b6472; }
+.lb-menu-item.lb-menu-danger { color: #b42318; }
+.lb-menu-item.lb-menu-danger:hover { background: #fdecea; }
 .lb-menu-sep { height: 1px; background: var(--lb-line); margin: 5px 4px; }
 
 body.lb-busy #lbBar .lb-group, body.lb-busy #lbExport, body.lb-busy .lb-slot-bar { pointer-events: none; opacity: .55; }
@@ -111,9 +115,11 @@ body.lb-busy #lbSaveBadge::after { content: ""; display: inline-block; width: 10
   border: 2px solid var(--lb-line); border-top-color: var(--lb-accent); border-radius: 50%; animation: lb-spin .7s linear infinite; }
 @keyframes lb-spin { to { transform: rotate(360deg); } }
 
-@media (max-width: 1300px) { .lb-tool .lb-tb-label { display: none; } }
-@media (max-width: 1080px) { .lb-tb-label { display: none; } .lb-export .lb-tb-label { display: inline; } .lb-status { display: none; } }
-@media (max-width: 960px) { .lb-name { display: none; } .lb-hide-sm { display: none !important; } }
+@media (max-width: 1440px) { .lb-tool .lb-tb-label { display: none; } }
+@media (max-width: 1200px) { .lb-tb-label { display: none; } .lb-export .lb-tb-label { display: inline; } .lb-status { display: none; } }
+/* never clip: if the bar still does not fit, it wraps (the page offset follows its height) */
+.lb-row { flex-wrap: wrap; }
+@media (max-width: 1080px) { .lb-name { display: none; } .lb-hide-sm { display: none !important; } }
 .lb-title, .lb-group, .lb-right { flex-shrink: 0; }
 .lb-page-count { white-space: nowrap; }
 @media (max-width: 720px) {
