@@ -1,0 +1,5 @@
+sphinx-typst-render==0.2.5
+typst-fillable==0.0.1
+pymupdf
+pypdf
+typst==0.15.2

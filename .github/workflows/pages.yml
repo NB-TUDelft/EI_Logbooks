@@ -1,20 +1,35 @@
-# Publishes site/ to GitHub Pages (repo settings: Pages source = GitHub Actions).
-name: pages
+# Builds the logbook PDFs from templates/ and publishes site/ to GitHub Pages.
+# Runs on every push to main (repo settings: Pages source = GitHub Actions).
+name: build and publish
 on:
   push:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write      # commit the refreshed link list in README.md
   pages: write
   id-token: write
 concurrency: { group: pages, cancel-in-progress: true }
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: "${{ steps.deploy.outputs.page_url }}" }
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip, cache-dependency-path: tools/requirements.txt }
+      - run: pip install -r tools/requirements.txt
+      - name: Build logbook PDFs
+        run: python tools/build_logbooks.py
+        env: { SITE_URL: "https://nb-tudelft.github.io/EI_Logbooks/" }
+      - name: Commit README link list if it changed
+        run: |
+          if ! git diff --quiet README.md; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "README: update logbook links" README.md
+            git push
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }

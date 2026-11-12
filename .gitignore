@@ -1,5 +1,11 @@
+# Built by tools/build_logbooks.py (locally, or by the GitHub workflow)
+site/logbooks/*.pdf
+site/logbooks/index.json
+templates/_typst_lib/
+
+# Local only
 server.log
-site/pdfjs/web/viewer_plain.html
-__pycache__/
 site_password.local.txt
 .wrangler/
+__pycache__/
+site/pdfjs/web/viewer_plain.html
