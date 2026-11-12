@@ -7,7 +7,8 @@ and the site updates itself about a minute later.
 
 1. Name the file `<n.m>_<Title_with_underscores>_logbook.typ`, for example
    `3.2_Active_filters_logbook.typ`. It becomes `?logbook=3.2`.
-2. Start from this:
+2. Start from a copy of `0.0_Template_logbook.typ` (the bare logbook, also on
+   the site as 0.0), and add the logbook's own parts, like this:
 
 ```typst
 #import "logbook_common.typ": *

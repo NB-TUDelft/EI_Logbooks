@@ -1,5 +1,11 @@
 [
   {
+    "id": "0.0",
+    "title": "Template",
+    "week": "week0",
+    "file": "0.0_Template_logbook.pdf"
+  },
+  {
     "id": "1.1",
     "title": "voltage divider",
     "week": "week1",
