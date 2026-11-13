@@ -9,14 +9,14 @@
     "id": "1.2",
     "title": "intro to oscilloscope and filters",
     "week": "week1",
-    "file": "1.2_intro_to_oscilloscope_and_filters_logbook.pdf",
-    "highlight": true
+    "file": "1.2_intro_to_oscilloscope_and_filters_logbook.pdf"
   },
   {
     "id": "2.1",
     "title": "Whack a mole",
     "week": "week2",
-    "file": "2.1_Whack_a_mole_logbook.pdf"
+    "file": "2.1_Whack_a_mole_logbook.pdf",
+    "highlight": true
   },
   {
     "id": "2.2",

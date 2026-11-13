@@ -7,7 +7,7 @@ Everything runs in the student's own browser; nothing is uploaded.
 <!-- site-url -->
 **Site:** https://nb-tudelft.github.io/EI_Logbooks/
 
-**Highlighted on the start page:** 1.2 intro to oscilloscope and filters (change it in [`templates/highlight.txt`](templates/highlight.txt))
+**Highlighted on the start page:** 2.1 Whack a mole (change it in [`templates/highlight.txt`](templates/highlight.txt))
 <!-- /site-url -->
 
 <details>
