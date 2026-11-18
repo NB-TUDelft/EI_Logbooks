@@ -592,37 +592,87 @@
     return out;
   }
 
-  function drawFieldText(page, font, charset, rect, value, da, ff, q) {
+  // Text fitting, shared by the export and the live hints. Boxes never grow:
+  // text is drawn at the box's own size, and only shrinks when the student
+  // picks that, never below MIN_PT.
+  const MIN_PT = 6, PAD = 2, LEAD = 1.2;
+  const boxOf = rect => {
     const x1 = Math.min(rect[0], rect[2]), x2 = Math.max(rect[0], rect[2]);
     const y1 = Math.min(rect[1], rect[3]), y2 = Math.max(rect[1], rect[3]);
-    const w = x2 - x1, h = y2 - y1, pad = 2;
+    return { x1, x2, y1, y2, w: x2 - x1, h: y2 - y1 };
+  };
+  const daSize = da => parseFloat(((da || '').match(/([\d.]+)\s+Tf/) || [])[1]) || 0;
+  const startSize = (ff, sizeDA, h) => sizeDA || ((ff & 4096) ? 10 : Math.min(12, (h - 2) / 1.2));
+  const fitsAt = (font, text, multi, w, h, size, extraLines = 0) => multi
+    ? (wrapLines(text, font, size, w - 2 * PAD).length + extraLines) * size * LEAD <= h - 2 * PAD
+    : font.widthOfTextAtSize(text.replace(/\n/g, ' '), size) <= w - 2 * PAD;
+  // Largest size from `start` down to MIN_PT (0.5 pt steps) at which the text fits; null if none.
+  function fitSize(font, text, multi, w, h, start, extraLines = 0) {
+    for (let s = start; s >= MIN_PT - 1e-9; s -= 0.5) if (fitsAt(font, text, multi, w, h, s, extraLines)) return s;
+    return null;
+  }
+  // Where a too-long answer is cut: after the last "." whose text still fits
+  // (leaving `extraLines` free for the reference); else the last space; else 0.
+  function splitPoint(font, text, w, h, size, extraLines) {
+    const ok = n => fitsAt(font, text.slice(0, n).trimEnd(), true, w, h, size, extraLines);
+    let best = 0;
+    for (const m of text.matchAll(/\.(?=\s|$)/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
+    if (best) return best;
+    for (const m of text.matchAll(/\s+/g)) { if (ok(m.index)) best = m.index; else break; }
+    return best;
+  }
+
+  function drawFieldText(page, font, charset, rect, value, da, ff, q, opts = {}) {
+    const { x1, x2, y1, y2, w, h } = boxOf(rect);
     const text = [...value.replace(/\r\n?/g, '\n')]
       .map(c => (c === '\n' || charset.has(c.codePointAt(0))) ? c : '?').join('');
-    const sizeDA = parseFloat((da.match(/([\d.]+)\s+Tf/) || [])[1]) || 0;
     let color = rgb(0, 0, 0);
     const mRgb = da.match(/([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg/), mG = da.match(/([\d.]+)\s+g(\s|$)/);
     if (mRgb) color = rgb(+mRgb[1], +mRgb[2], +mRgb[3]); else if (mG) color = rgb(+mG[1], +mG[1], +mG[1]);
     const xFor = (line, size) => {
       const tw = font.widthOfTextAtSize(line, size);
-      return q === 1 ? x1 + (w - tw) / 2 : q === 2 ? x2 - pad - tw : x1 + pad;
+      return q === 1 ? x1 + (w - tw) / 2 : q === 2 ? x2 - PAD - tw : x1 + PAD;
     };
+    const start = startSize(ff, daSize(da), h);
+    const red = rgb(0.75, 0, 0);
     if (ff & 4096) {                                              // multi-line
-      let size = sizeDA || 10, lines = wrapLines(text, font, size, w - 2 * pad);
-      while (size > 5 && lines.length * size * 1.2 > h - 2 * pad) {
-        size -= 0.5; lines = wrapLines(text, font, size, w - 2 * pad);
-      }
+      const size = opts.size || fitSize(font, text, true, w, h, start, opts.ref ? 1 : 0) || MIN_PT;
+      const lines = text ? wrapLines(text, font, size, w - 2 * PAD) : [];
+      const yAt = i => y2 - PAD - size * (0.9 + LEAD * i);
       lines.forEach((line, i) => {
-        if (line) page.drawText(line, { x: xFor(line, size), y: y2 - pad - size * (0.9 + 1.2 * i), size, font, color });
+        if (line && yAt(i) >= y1) page.drawText(line, { x: xFor(line, size), y: yAt(i), size, font, color });
       });
+      if (opts.ref) {
+        const rs = Math.min(9, size);
+        page.drawText(opts.ref, { x: x1 + PAD, y: Math.max(y1 + PAD, yAt(lines.length) + (size - rs) * 0.9), size: rs, font, color: red });
+      }
     } else {
       const line = text.replace(/\n/g, ' ');
-      let size = sizeDA || Math.min(12, (h - 2) / 1.2);
-      while (size > 4 && font.widthOfTextAtSize(line, size) > w - 2 * pad) size -= 0.5;
+      const size = opts.size || fitSize(font, line, false, w, h, start) || MIN_PT;
       page.drawText(line, { x: xFor(line, size), y: y1 + h / 2 - size * 0.35, size, font, color });
     }
   }
 
-  async function flattenedBytes() {
+  // Ask once, on export, what to do with every answer that does not fit its box.
+  // Resolves to {name: 'all' | 'overflow' | 'shrink'} or null on cancel.
+  function askOverflow(items) {
+    const opts = it => [['overflow', 'Move only the overflow to a new page'], ['all', 'Move all text to a new page'],
+      ['shrink', it.shrinkTo ? `Shrink the text (to ${it.shrinkTo} pt)` : 'Shrink the text (too long, even at 6 pt)']];
+    const rows = items.map(it => {
+      const sel = $('select', { class: 'lb-select', 'aria-label': 'What to do with ' + it.label, 'data-field': it.name },
+        ...opts(it).map(([v, t]) => { const o = $('option', { value: v }, t); if (v === 'shrink' && !it.shrinkTo) o.disabled = true; return o; }));
+      return { it, sel, el: $('label', { class: 'lb-field' }, $('span', {}, `${it.label} (page ${it.page}, ${it.extra} characters too many)`), sel) };
+    });
+    return modal('Some answers do not fit', [
+      $('p', { class: 'lb-modal-text' }, 'These boxes have a fixed size. Pick for each one what happens in the exported PDF. ' +
+        'Text you move goes to a new page at the end, and the box says where it continues.'),
+      $('div', { class: 'lb-overflow-list' }, ...rows.map(r => r.el))],
+      [{ text: 'Cancel', value: null },
+       { text: 'Export', primary: true, id: 'lbOverflowOk', value: () => Object.fromEntries(rows.map(r => [r.it.name, r.sel.value])) }],
+      'Answers that do not fit');
+  }
+
+  async function flattenedBytes(decide = askOverflow) {
     const a = app();
     a.pdfViewer._layerProperties?.annotationEditorUIManager?.endCurrentEditing?.();
     const fontBytes = await loadFieldFont();
@@ -660,7 +710,8 @@
       setTextMatrix(1, 0, 0, 1, x, y), showText(font.encodeText(safe(str))),
       setTextRenderingMode(TextRenderingMode.Fill), endText());   // Tr is text state and survives ET: reset or the answers drawn next are invisible too
     const attr = (k, v) => v === undefined || v === null || v === '' ? '' : ` ${k}="${String(v).replace(/"/g, "'")}"`;   // swap quotes inside values only, so the label syntax keeps its own
-    const exact = { pages: [], fields: {}, checks: {}, images: {} };       // the same, verbatim, in the Info dict
+    const exact = { pages: [], fields: {}, checks: {}, images: {}, overflow: {} };   // the same, verbatim, in the Info dict
+    const texts = [];                                             // drawn after all pages, once overflow is decided
     const slotMeta = name => state.images['slot:' + name] || {};
     const imageLabel = (slot, m) => `[[NB2420:image slot="${slot}" filled="yes"${attr('exercise', m.exercise)}` +
       `${attr('file', m.original_filename)}${attr('sha256', m.sha256)}${attr('sha512', m.sha512)}]]`;
@@ -673,7 +724,7 @@
       exact.pages.push({ n: pageIndex + 1, kind: info.added ? info.kind : 'template', exercise: info.exercise || null });
       const annots = page.node.lookup(N('Annots'));
       const list = annots instanceof PDFArray ? annots : ctx.obj([]);
-      const keep = [], ops = [], texts = [], labels = [];
+      const keep = [], ops = [], labels = [];
       for (let i = 0; i < list.size(); i++) {
         const ref = list.get(i);
         const d = ctx.lookup(ref);
@@ -698,7 +749,8 @@
           if (rectHere && !(ff & 8192)) {
             const name = fieldName(d);
             exact.fields[name] = value;
-            texts.push([rectHere, value, textOf(inherit(d, 'DA') || daDefault), ff, qv ? qv.asNumber() : 0, name]);
+            texts.push({ page, key, rect: rectHere, value, da: textOf(inherit(d, 'DA') || daDefault), ff, q: qv ? qv.asNumber() : 0,
+              name, label: textOf(inherit(d, 'TU')) || name, pageNo: pageIndex + 1 });
             const pm = state.images['page:' + name];                         // notes field of an image page
             if (pm) {
               exact.images['page:' + name] = pm;
@@ -748,13 +800,61 @@
       if (keep.length) page.node.set(N('Annots'), ctx.obj(keep)); else page.node.delete(N('Annots'));
       if (ops.length) page.pushOperators(...ops);
       for (const [str, x, y] of labels) label(page, key, str, x, y);
-      for (const [rect, value, da, ff, q, name] of texts) {
-        const x1 = Math.min(rect[0], rect[2]), x2 = Math.max(rect[0], rect[2]);
-        const y1 = Math.min(rect[1], rect[3]), y2 = Math.max(rect[1], rect[3]);
-        label(page, key, `[[NB2420:field name="${name}"]]`, x1, y2 - 4);
-        if (value.trim()) drawFieldText(page, font, charset, rect, value, da, ff, q);
-        label(page, key, '[[/NB2420:field]]', x2 - 20, y1 + 1);
+    }
+
+    // Answers that do not fit their (fixed) box: ask once, then move or shrink.
+    const clean = v => [...v.replace(/\r\n?/g, '\n')].map(c => (c === '\n' || charset.has(c.codePointAt(0))) ? c : '?').join('');
+    const over = [];
+    for (const t of texts) {
+      if (!(t.ff & 4096) || !t.value.trim()) continue;
+      const b = boxOf(t.rect), txt = clean(t.value), start = startSize(t.ff, daSize(t.da), b.h);
+      if (fitsAt(font, txt, true, b.w, b.h, start)) continue;
+      const cut = splitPoint(font, txt, b.w, b.h, start, 1);
+      Object.assign(t, { txt, cut });
+      over.push({ name: t.name, label: t.label, page: t.pageNo, extra: txt.length - cut,
+        shrinkTo: fitSize(font, txt, true, b.w, b.h, start), t });
+    }
+    const choice = over.length ? await decide(over) : {};
+    if (!choice) return null;                                     // export cancelled
+    const [PW, PH0] = (() => { const s = pl.getPage(0).getSize(); return [s.width, s.height]; })();
+    const M = 50, BS = 10.5, grey = rgb(0.35, 0.35, 0.35);
+    for (const o of over) {
+      let c = choice[o.name] || 'overflow';
+      if (c === 'shrink' && !o.shrinkTo) c = 'overflow';
+      if (c === 'shrink') { o.t.opts = { size: o.shrinkTo }; exact.overflow[o.name] = { choice: c, size: o.shrinkTo }; continue; }
+      const kept = c === 'all' ? '' : o.t.txt.slice(0, o.t.cut).trimEnd();
+      const moved = c === 'all' ? o.t.txt : o.t.txt.slice(o.t.cut).trimStart();
+      const first = pl.getPageCount() + 1, pages = [];
+      let pg, key, y;
+      const newPage = () => {
+        pg = pl.addPage([PW, PH0]); key = fontKey(pg);
+        const n = pl.getPageCount(); pages.push(n);
+        label(pg, key, `[[NB2420:page n="${n}" kind="overflow"${attr('field', o.name)}]]`, 2, PH0 - 6);
+        exact.pages.push({ n, kind: 'overflow', exercise: null, field: o.name });
+        y = PH0 - M;
+      };
+      newPage();
+      pg.drawText(safe(`Continued from: ${o.label} (page ${o.page})`), { x: M, y: y - 14, size: 14, font, maxWidth: PW - 2 * M });
+      y -= 34;
+      pg.drawText(c === 'all' ? 'The whole answer was moved here because it did not fit its box.'
+        : 'The end of this answer was moved here because it did not fit its box.', { x: M, y, size: 9, font, color: grey });
+      y -= 24;
+      label(pg, key, `[[NB2420:overflow name="${o.name}"]]`, M, y + BS);
+      for (const line of wrapLines(moved, font, BS, PW - 2 * M)) {
+        if (y < M) { newPage(); y -= BS; }
+        if (line) pg.drawText(line, { x: M, y, size: BS, font });
+        y -= BS * LEAD;
       }
+      label(pg, key, '[[/NB2420:overflow]]', M, Math.max(4, y));
+      o.t.value = kept;
+      o.t.opts = { ref: c === 'all' ? `Full text on page ${first}` : `(continued on page ${first})` };
+      exact.overflow[o.name] = { choice: c, pages, moved };
+    }
+    for (const t of texts) {
+      const { x1, x2, y1, y2 } = boxOf(t.rect);
+      label(t.page, t.key, `[[NB2420:field name="${t.name}"]]`, x1, y2 - 4);
+      if (t.value.trim() || t.opts?.ref) drawFieldText(t.page, font, charset, t.rect, t.value, t.da, t.ff, t.q, t.opts || {});
+      label(t.page, t.key, '[[/NB2420:field]]', x2 - 20, y1 + 1);
     }
     pl.catalog.delete(N('AcroForm'));
     pl.getInfoDict().set(N('LogbookExported'), PDFHexString.fromText(nowIso()));
@@ -776,6 +876,7 @@
     setSaveBadge('Preparing your PDF…');
     try {
       const bytes = await flattenedBytes();
+      if (!bytes) { setSaveBadge('Export cancelled', 'warn'); return; }
       downloadBytes(bytes, (state.id || 'logbook') + '.pdf');
       state.savedHash = state.lastHash;
       setSaveBadge('Exported ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
@@ -1031,6 +1132,108 @@
     }
   }
 
+  // -------------------------------------------------------------- live hints
+  // While typing, measure with the same font and fitting rules as the export:
+  // single-line boxes stop at what fits at 6 pt; every box shows "N characters
+  // left" from 30 left; multi-line text that will not fit is marked yellow.
+  const HINT_FROM = 30;
+  let measurer = null;
+  async function liveFont() {
+    if (measurer) return measurer;
+    const bytes = await loadFieldFont();
+    const face = new FontFace('LbLiberation', bytes.slice(0));
+    await face.load();
+    document.fonts.add(face);
+    const cx = document.createElement('canvas').getContext('2d');
+    // pt and px scale alike, so a width at "size px" is the width at size pt.
+    measurer = { widthOfTextAtSize: (s, size) => { cx.font = `${size}px LbLiberation`; return cx.measureText(s).width; } };
+    measurer.avg = size => measurer.widthOfTextAtSize('etaoinshrdlucmfwyp ', size) / 19;
+    return measurer;
+  }
+  const fieldsByPage = {};                                        // pageNumber -> Promise<[{id, rect, multi, start}]>
+  function pageFields(pageNumber) {
+    if (!fieldsByPage[pageNumber]) {
+      fieldsByPage[pageNumber] = app().pdfDocument.getPage(pageNumber).then(p => p.getAnnotations()).then(list => list
+        .filter(x => x.fieldType === 'Tx' && !x.readOnly && !(x.fieldFlags & 8192) && !String(x.fieldName).startsWith('img_'))
+        .map(x => {
+          const b = boxOf(x.rect), multi = !!x.multiLine;
+          return { id: x.id, rect: x.rect, multi, b,
+            start: startSize(multi ? 4096 : 0, x.defaultAppearanceData?.fontSize || 0, b.h) };
+        }));
+    }
+    return fieldsByPage[pageNumber];
+  }
+  // What fits, for one box and its current text.
+  function measure(f, font, text) {
+    const { w, h } = f.b, avail = w - 2 * PAD, avg = font.avg(MIN_PT);
+    if (!f.multi) {
+      const used = font.widthOfTextAtSize(text.replace(/\n/g, ' '), MIN_PT);
+      return { left: Math.floor((avail - used) / avg) };
+    }
+    const size = f.start, avgS = font.avg(size);
+    if (fitsAt(font, text, true, w, h, size)) {
+      const lines = text ? wrapLines(text, font, size, avail) : [''];
+      const room = Math.floor((h - 2 * PAD) / (size * LEAD));
+      const last = font.widthOfTextAtSize(lines[lines.length - 1], size);
+      return { left: Math.floor((avail - last) / avgS) + (room - lines.length) * Math.floor(avail / avgS) };
+    }
+    const cut = splitPoint(font, text, w, h, size, 1);
+    return { left: 0, cut, moved: text.length - cut };
+  }
+  function attachHints(pageNumber) {
+    const pv = app().pdfViewer.getPageView(pageNumber - 1);
+    if (!pv || !pv.div) return;
+    Promise.all([pageFields(pageNumber), liveFont()]).then(([fields, font]) => {
+      for (const f of fields) {
+        const el = pv.div.querySelector(`.annotationLayer [data-element-id="${f.id}"]`);
+        if (!el || el.dataset.lbHint) continue;
+        el.dataset.lbHint = '1';
+        const section = el.parentElement;
+        let mirror = null, hint = null;
+        const place = () => {
+          const v = pv.viewport;
+          const [ax, ay] = v.convertToViewportPoint(f.b.x1, f.b.y1);
+          const [bx, by] = v.convertToViewportPoint(f.b.x2, f.b.y2);
+          return { left: Math.min(ax, bx), top: Math.max(ay, by) + 3 };
+        };
+        const update = () => {
+          const text = el.value.replace(/\r\n?/g, '\n');
+          const m = measure(f, font, text);
+          if (!f.multi) {
+            const own = +(el.dataset.lbOwnMax ??= String(el.maxLength > 0 ? el.maxLength : Infinity));
+            el.maxLength = Math.min(own, text.length + Math.max(0, m.left));
+          }
+          // yellow mark on the part that moves
+          if (f.multi && m.cut !== undefined) {
+            if (!mirror) { mirror = $('div', { class: 'lb-mirror', 'aria-hidden': 'true' }); section.insertBefore(mirror, el); }
+            const cs = getComputedStyle(el);
+            for (const p of ['font', 'letterSpacing', 'lineHeight', 'padding', 'textAlign', 'borderWidth', 'borderStyle', 'boxSizing'])
+              mirror.style[p] = cs[p];
+            mirror.style.borderColor = 'transparent';
+            mirror.replaceChildren(document.createTextNode(text.slice(0, m.cut)), $('mark', {}, text.slice(m.cut) || ' '));
+            mirror.scrollTop = el.scrollTop;
+          } else if (mirror) { mirror.remove(); mirror = null; }
+          // the hint, only while this box has focus
+          const focused = document.activeElement === el;
+          let msg = null;
+          if (focused && m.moved) msg = `This text will get moved to a new page in export [${m.moved} char]. You can also shrink the text on export.`;
+          else if (focused && m.left <= HINT_FROM) msg = `${Math.max(0, m.left)} characters left`;
+          if (focused) for (const other of document.querySelectorAll('.lb-hint')) if (other !== hint) other.remove();   // one at a time
+          if (!msg) { if (hint) { hint.remove(); hint = null; } return; }
+          if (!hint || !hint.isConnected) { hint = $('div', { class: 'lb-hint', role: 'status' }); pv.div.append(hint); }
+          hint.className = 'lb-hint' + (m.moved || m.left <= 0 ? ' lb-warn' : '');
+          hint.textContent = msg;
+          Object.assign(hint.style, Object.fromEntries(Object.entries(place()).map(([k, v]) => [k, v + 'px'])));
+        };
+        el.addEventListener('input', update);
+        el.addEventListener('focus', update);
+        el.addEventListener('blur', update);
+        el.addEventListener('scroll', () => { if (mirror) mirror.scrollTop = el.scrollTop; });
+        update();
+      }
+    }).catch(err => console.warn('[logbook] live hints', err));
+  }
+
   // -------------------------------------------------------------- wiring
   // Tell other tabs which logbook is open here; the later tab turns its autosave off.
   const channel = 'BroadcastChannel' in window ? new BroadcastChannel('nb2420-logbooks') : null;
@@ -1113,6 +1316,7 @@
         if (state.onAnalysed) state.onAnalysed(); // do not leave a waiting action hanging
       }));
       a.eventBus.on('pagerendered', ({ pageNumber }) => decoratePage(pageNumber));
+      a.eventBus.on('annotationlayerrendered', ({ pageNumber }) => attachHints(pageNumber));
       a.eventBus.on('pagechanging', updateDeleteButton);
     });
   }, 20);
@@ -1125,6 +1329,10 @@
     // Takes the id of a file input, so test drivers in sandboxes need not pass a function.
     setTestFile: id => { testFileHook = () => document.getElementById(id)?.files[0] || null; },
     autosaveNow, exportPdf,
+    // Export bytes with a scripted overflow choice ('all' | 'overflow' | 'shrink'), and the items it was asked about.
+    exportBytesWith: async pick => { let asked = []; const b = await flattenedBytes(items => {
+      asked = items.map(i => ({ name: i.name, page: i.page, extra: i.extra, shrinkTo: i.shrinkTo }));
+      return Object.fromEntries(items.map(i => [i.name, pick])); }); return { bytes: b, asked }; },
     insertBlankPage, insertImagePage, deleteCurrentPage,
     slotInsert: name => document.querySelector(`.lb-slot[data-slot="${name}"] [data-act="slot-insert"]`)?.click(),
   };
