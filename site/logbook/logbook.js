@@ -440,12 +440,16 @@
       const bold = await pl.embedFont(StandardFonts.HelveticaBold);
       const regular = await pl.embedFont(StandardFonts.Helvetica);
       const M = 40;
-      page.drawText(ansi('Text for: ' + exercise), { x: M, y: H - M - 12, size: 12, font: bold, maxWidth: W - 2 * M });
-      page.drawText('Added page', { x: M, y: H - M - 28, size: 8, font: regular, color: rgb(0.45, 0.45, 0.45) });
+      const head = ansi('Text for: ' + exercise);
+      const headLines = wrapLines(head, bold, 12, W - 2 * M);
+      headLines.forEach((ln, i) => ln && page.drawText(ln, { x: M, y: H - M - 12 - i * 15, size: 12, font: bold }));
+      const subY = H - M - 12 - headLines.length * 15 - 2;
+      page.drawText('Added page', { x: M, y: subY, size: 8, font: regular, color: rgb(0.45, 0.45, 0.45) });
       const id = 'added_text_' + Date.now().toString(36);
       const field = pl.getForm().createTextField(id);
       field.enableMultiline();
-      field.addToPage(page, { x: M, y: M, width: W - 2 * M, height: H - 2 * M - 40, font: regular, borderWidth: 0.5,
+      const topGap = (H - subY) + 12;
+      field.addToPage(page, { x: M, y: M, width: W - 2 * M, height: H - M - topGap, font: regular, borderWidth: 0.5,
                               borderColor: rgb(0.6, 0.6, 0.6), backgroundColor: rgb(0.97, 0.98, 0.98) });
       field.setFontSize(10);
       markAdded(page, 'text', exercise);
@@ -466,9 +470,12 @@
       const bold = await pl.embedFont(StandardFonts.HelveticaBold);
       const regular = await pl.embedFont(StandardFonts.Helvetica);
       const M = 40, notesH = 120;
-      page.drawText(ansi('Image for: ' + exercise), { x: M, y: H - M - 12, size: 12, font: bold, maxWidth: W - 2 * M });
-      page.drawText(ansi('Added page  |  file: ' + rec.meta.original_filename), { x: M, y: H - M - 28, size: 8, font: regular, color: rgb(0.45, 0.45, 0.45) });
-      const top = H - M - 40, bottom = M + notesH + 24;
+      const head = ansi('Image for: ' + exercise);
+      const headLines = wrapLines(head, bold, 12, W - 2 * M);
+      headLines.forEach((ln, i) => ln && page.drawText(ln, { x: M, y: H - M - 12 - i * 15, size: 12, font: bold }));
+      const subY = H - M - 12 - headLines.length * 15 - 2;
+      page.drawText(ansi('Added page  |  file: ' + rec.meta.original_filename), { x: M, y: subY, size: 8, font: regular, color: rgb(0.45, 0.45, 0.45) });
+      const top = subY - 12, bottom = M + notesH + 24;
       const fit = contain(rec.w, rec.h, W - 2 * M, top - bottom);
       const img = await pl.embedJpg(rec.bytes);
       page.drawImage(img, { x: (W - fit.w) / 2, y: bottom + (top - bottom - fit.h) / 2, width: fit.w, height: fit.h });
@@ -866,8 +873,9 @@
         y = PH0 - M;
       };
       newPage();
-      pg.drawText(safe(`Continued from: ${o.label} (page ${o.page})`), { x: M, y: y - 14, size: 14, font, maxWidth: PW - 2 * M });
-      y -= 34;
+      const headLines = wrapLines(safe(`Continued from: ${o.label} (page ${o.page})`), font, 14, PW - 2 * M);
+      headLines.forEach((ln, i) => ln && pg.drawText(ln, { x: M, y: y - 14 - i * 18, size: 14, font }));
+      y -= 16 + headLines.length * 18;
       pg.drawText(c === 'all' ? 'The whole answer was moved here because it did not fit its box.'
         : 'The end of this answer was moved here because it did not fit its box.', { x: M, y, size: 9, font, color: grey });
       y -= 24;
@@ -1256,7 +1264,7 @@
           // the hint, only while this box has focus
           const focused = document.activeElement === el;
           let msg = null;
-          if (focused && m.moved) msg = `This text will get moved to a new page in export (cut off at the last . / ! / ?; ${m.moved} char). You can also shrink the text on export, or select Add a text page if you want to write more.`;
+          if (focused && m.moved) msg = `This text will get moved to a new page in export (cut off at the last . / ! / ?; ${m.moved} chars). You can also shrink the text on export, or select Add a text page if you want to write more.`;
           else if (focused && m.left <= 0) msg = '0 characters left. If you want to write more, select Add a text page.';
           else if (focused && m.left <= HINT_FROM) msg = `${m.left} characters left`;
           if (focused) for (const other of document.querySelectorAll('.lb-hint')) if (other !== hint) other.remove();   // one at a time
