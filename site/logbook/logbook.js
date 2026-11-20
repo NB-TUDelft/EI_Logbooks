@@ -611,12 +611,12 @@
     for (let s = start; s >= MIN_PT - 1e-9; s -= 0.5) if (fitsAt(font, text, multi, w, h, s, extraLines)) return s;
     return null;
   }
-  // Where a too-long answer is cut: after the last "." whose text still fits
+  // Where a too-long answer is cut: after the last ".", "!", or "?" whose text still fits
   // (leaving `extraLines` free for the reference); else the last space; else 0.
   function splitPoint(font, text, w, h, size, extraLines) {
     const ok = n => fitsAt(font, text.slice(0, n).trimEnd(), true, w, h, size, extraLines);
     let best = 0;
-    for (const m of text.matchAll(/\.(?=\s|$)/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
+    for (const m of text.matchAll(/[.!?](?=\s|$)/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
     if (best) return best;
     for (const m of text.matchAll(/\s+/g)) { if (ok(m.index)) best = m.index; else break; }
     return best;
@@ -656,19 +656,51 @@
   // Ask once, on export, what to do with every answer that does not fit its box.
   // Resolves to {name: 'all' | 'overflow' | 'shrink'} or null on cancel.
   function askOverflow(items) {
-    const opts = it => [['overflow', 'Move only the overflow to a new page'], ['all', 'Move all text to a new page'],
-      ['shrink', it.shrinkTo ? `Shrink the text (to ${it.shrinkTo} pt)` : 'Shrink the text (too long, even at 6 pt)']];
-    const rows = items.map(it => {
-      const sel = $('select', { class: 'lb-select', 'aria-label': 'What to do with ' + it.label, 'data-field': it.name },
-        ...opts(it).map(([v, t]) => { const o = $('option', { value: v }, t); if (v === 'shrink' && !it.shrinkTo) o.disabled = true; return o; }));
-      return { it, sel, el: $('label', { class: 'lb-field' }, $('span', {}, `${it.label} (page ${it.page}, ${it.extra} characters too many)`), sel) };
-    });
+    const picked = Object.fromEntries(items.map(it => [it.name, 'overflow']));
+    const table = $('div', { class: 'lb-overflow-table' },
+      $('div', { class: 'lb-ov-head' },
+        $('span', {}, 'Question'),
+        $('span', {}, 'Move overflow'),
+        $('span', {}, 'Move all text'),
+        $('span', {}, 'Shrink to fit')));
+    for (const it of items) {
+      const rowBtns = [];
+      const optDefs = [
+        ['overflow', 'Move overflow', 'lb-ov-overflow', false],
+        ['all', 'Move all', 'lb-ov-all', false],
+        ['shrink', it.shrinkTo ? `Shrink (${it.shrinkTo} pt)` : 'Too long (6 pt)', 'lb-ov-shrink', !it.shrinkTo],
+      ];
+      for (const [val, label, cls, isDisabled] of optDefs) {
+        const b = $('button', {
+          type: 'button',
+          class: `lb-ov-btn ${cls}` + (picked[it.name] === val ? ' lb-on' : ''),
+          'data-field': it.name,
+          'data-choice': val,
+          'aria-pressed': String(picked[it.name] === val),
+          onclick: () => {
+            picked[it.name] = val;
+            for (const rb of rowBtns) {
+              const active = rb.dataset.choice === val;
+              rb.classList.toggle('lb-on', active);
+              rb.setAttribute('aria-pressed', String(active));
+            }
+          },
+        }, label);
+        if (isDisabled) b.disabled = true;
+        rowBtns.push(b);
+      }
+      table.append($('div', { class: 'lb-ov-row' },
+        $('div', { class: 'lb-ov-q' },
+          $('strong', {}, it.label),
+          $('span', {}, `page ${it.page} · +${it.extra} chars`)),
+        ...rowBtns));
+    }
     return modal('Some answers do not fit', [
-      $('p', { class: 'lb-modal-text' }, 'These boxes have a fixed size. Pick for each one what happens in the exported PDF. ' +
-        'Text you move goes to a new page at the end, and the box says where it continues.'),
-      $('div', { class: 'lb-overflow-list' }, ...rows.map(r => r.el))],
+      $('p', { class: 'lb-modal-text' }, 'These boxes have a fixed size. Pick an option per question. ' +
+        'Moved text goes to a new page at the end (cut off at the last . / ! / ?), and the box says where it continues.'),
+      table],
       [{ text: 'Cancel', value: null },
-       { text: 'Export', primary: true, id: 'lbOverflowOk', value: () => Object.fromEntries(rows.map(r => [r.it.name, r.sel.value])) }],
+       { text: 'Export', primary: true, id: 'lbOverflowOk', value: () => ({ ...picked }) }],
       'Answers that do not fit');
   }
 
@@ -988,13 +1020,7 @@
     const menuItem = (id, label, fn) => $('button', { id, type: 'button', class: 'lb-menu-item', role: 'menuitem',
       onclick: () => { closeMenu(); fn(); } }, label);
     ui.menu.append(
-      menuItem('lbMenuEditable', 'Download editable copy', async () => {
-        if (originals.download) return originals.download();
-        const bytes = await a()?.pdfDocument?.saveDocument?.();
-        if (bytes) downloadBytes(bytes, (state.id || 'logbook') + '_editable.pdf');
-      }),
       menuItem('lbMenuOpen', 'Open a saved copy…', () => a().eventBus.dispatch('openfile', { source: window })),
-      menuItem('lbMenuPrint', 'Print', () => window.print()),
       $('div', { class: 'lb-menu-sep' }),
       menuItem('lbMenuAll', 'All logbooks', () => { location.href = '../../index.html'; }));
     const moreBtn = btn('lbMore', 'More', 'more', e => { e.stopPropagation(); const open = ui.menu.hidden; closeMenu(); if (open) openMenu(); });
@@ -1036,7 +1062,7 @@
     const what = all ? 'all logbooks' : 'this logbook';
     if (!await askConfirm(`Delete saved work for ${what}?`,
       `This removes your progress for ${what} from this browser. Anything you have not exported as a PDF will be lost.`,
-      'Continue', false)) return;
+      'Continue')) return;
     if (!await askConfirm('Are you sure?',
       `Your progress for ${what} cannot be recovered afterwards. Close other tabs with a logbook first, or they will save it again.`,
       all ? 'Delete everything' : 'Delete my work')) return;
@@ -1182,7 +1208,7 @@
       const used = font.widthOfTextAtSize(text.replace(/\n/g, ' '), MIN_PT);
       return { left: Math.floor((avail - used) / avg) };
     }
-    const size = f.start, avgS = font.avg(size);
+    const size = MIN_PT, avgS = font.avg(size);
     if (fitsAt(font, text, true, w, h, size)) {
       const lines = text ? wrapLines(text, font, size, avail) : [''];
       const room = Math.floor((h - 2 * PAD) / (size * LEAD));
@@ -1210,6 +1236,8 @@
         };
         const update = () => {
           const text = el.value.replace(/\r\n?/g, '\n');
+          const livePt = fitSize(font, text, f.multi, f.b.w, f.b.h, f.start) || MIN_PT;
+          el.style.fontSize = (livePt * pv.viewport.scale) + 'px';
           const m = measure(f, font, text);
           if (!f.multi) {
             const own = +(el.dataset.lbOwnMax ??= String(el.maxLength > 0 ? el.maxLength : Infinity));
@@ -1228,8 +1256,9 @@
           // the hint, only while this box has focus
           const focused = document.activeElement === el;
           let msg = null;
-          if (focused && m.moved) msg = `This text will get moved to a new page in export [${m.moved} char]. You can also shrink the text on export.`;
-          else if (focused && m.left <= HINT_FROM) msg = `${Math.max(0, m.left)} characters left`;
+          if (focused && m.moved) msg = `This text will get moved to a new page in export (cut off at the last . / ! / ?; ${m.moved} char). You can also shrink the text on export, or select Add a text page if you want to write more.`;
+          else if (focused && m.left <= 0) msg = '0 characters left. If you want to write more, select Add a text page.';
+          else if (focused && m.left <= HINT_FROM) msg = `${m.left} characters left`;
           if (focused) for (const other of document.querySelectorAll('.lb-hint')) if (other !== hint) other.remove();   // one at a time
           if (!msg) { if (hint) { hint.remove(); hint = null; } return; }
           if (!hint || !hint.isConnected) { hint = $('div', { class: 'lb-hint', role: 'status' }); pv.div.append(hint); }

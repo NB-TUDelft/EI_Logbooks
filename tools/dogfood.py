@@ -37,7 +37,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
 def start_server():
     handler = functools.partial(QuietHandler, directory=str(SITE_DIR))
-    httpd = socketserver.TCPServer(("127.0.0.1", 0), handler)
+    httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     port = httpd.server_address[1]
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
@@ -115,6 +115,7 @@ def run_suite():
     )
 
     driver = webdriver.Chrome(options=opts)
+    driver.set_script_timeout(90)
     states = []
     meta_rows = []
 
@@ -166,7 +167,7 @@ def run_suite():
              f"Swatches={swatch_titles}")
         driver.execute_script("document.getElementById('lbToolSelect').click(); document.body.click();")
 
-        # 3. Single-line MaxLen cap + 30/0 counter
+        # 3. Single-line live rescaling + MaxLen cap + 30/0 counter
         sl_inp = driver.execute_script("""
             const inp = [...document.querySelectorAll('.textWidgetAnnotation input')][0];
             if (inp) inp.scrollIntoView({block: 'center'});
@@ -174,16 +175,21 @@ def run_suite():
         """)
         sl_inp.click()
         ml = int(sl_inp.get_attribute("maxLength") or 0)
-        sl_inp.send_keys("A" * max(1, ml - 5))
+        sl_inp.send_keys("Hello")
+        time.sleep(0.15)
+        fs_before = driver.execute_script("return getComputedStyle(arguments[0]).fontSize;", sl_inp)
+        snap("03a_singleline_before_shrink", [".textWidgetAnnotation input"], True, f"fontSize={fs_before}")
+        sl_inp.send_keys("A" * max(1, ml - 10))
         time.sleep(0.15)
         hint5 = driver.execute_script("return document.querySelector('.lb-hint')?.innerText || '';")
         sl_inp.send_keys("B" * 20)
         time.sleep(0.15)
+        fs_after = driver.execute_script("return getComputedStyle(arguments[0]).fontSize;", sl_inp)
         hint0 = driver.execute_script("return document.querySelector('.lb-hint')?.innerText || '';")
         cur_ml = int(sl_inp.get_attribute("maxLength") or 0)
         val_len = len(sl_inp.get_attribute("value") or "")
-        sl_info = {"init_ml": ml, "cur_ml": cur_ml, "valLen": val_len, "hint5": hint5, "hint0": hint0}
-        sl_ok = bool(cur_ml > 0 and val_len == cur_ml and "0 characters left" in hint0)
+        sl_info = {"init_ml": ml, "cur_ml": cur_ml, "valLen": val_len, "fs_before": fs_before, "fs_after": fs_after, "hint5": hint5, "hint0": hint0}
+        sl_ok = bool(cur_ml > 0 and val_len == cur_ml and fs_before != fs_after and "0 characters left" in hint0 and "Add a text page" in hint0)
         snap("03_singleline_cap", [".lb-hint"], sl_ok, str(sl_info))
 
         # 4. Multi-line overflow + yellow highlight + export dialog (with shrink disabled on ultra-long)
@@ -203,21 +209,22 @@ def run_suite():
             const hint = document.querySelector('.lb-hint')?.innerText || '';
             return {overCount, hint, count: areas.length};
         """)
-        ml_ok = bool(ml_info and ml_info["overCount"] >= 1 and "moved" in ml_info["hint"])
+        ml_ok = bool(ml_info and ml_info["overCount"] >= 1 and "cut off at the last . / ! / ?" in ml_info["hint"])
         snap("04_multiline_overflow", [".lb-hint", ".lb-mirror mark"], ml_ok, str(ml_info))
 
-        # 5. Export dialog + busy toast
+        # 5. Export dialog + table buttons
         driver.execute_script("document.getElementById('lbExport').click();")
-        time.sleep(0.5)
+        WebDriverWait(driver, 15).until(lambda d: d.find_elements(By.CSS_SELECTOR, ".lb-modal"))
         dlg_info = driver.execute_script("""
             const dlg = document.querySelector('.lb-modal');
             if (!dlg) return null;
             const disabled = [...dlg.querySelectorAll('option:disabled, input[type="radio"]:disabled, button:disabled')].length;
-            return {title: dlg.querySelector('h2')?.innerText, disabled};
+            const ovBtns = dlg.querySelectorAll('.lb-ov-btn').length;
+            return {title: dlg.querySelector('h2')?.innerText, disabled, ovBtns};
         """)
-        snap("05_export_dialog", [".lb-modal h2", ".lb-modal button", ".lb-modal label"],
-             bool(dlg_info and dlg_info["disabled"] >= 1), f"dlg={dlg_info}")
-        driver.execute_script("document.querySelector('.lb-modal button')?.click();")
+        snap("05_export_dialog", [".lb-modal h2", ".lb-modal-actions button", ".lb-ov-head", ".lb-ov-btn"],
+             bool(dlg_info and dlg_info["disabled"] >= 1 and dlg_info["ovBtns"] >= 6), f"dlg={dlg_info}")
+        driver.execute_script("document.querySelector('.lb-modal-actions button')?.click();")
         time.sleep(0.2)
 
         # 6. Export paths via window.nb2420Logbook + pypdf verification
@@ -274,15 +281,21 @@ def run_suite():
             driver.execute_async_script("""
                 const sname = arguments[0], cb = arguments[1];
                 window.nb2420Logbook.slotInsert(sname);
-                setTimeout(() => cb(true), 1800);
+                const waitIdle = () => {
+                    if (!document.body.classList.contains('lb-busy') && window.nb2420Logbook.state().images['slot:' + sname]) cb(true);
+                    else setTimeout(waitIdle, 200);
+                };
+                setTimeout(waitIdle, 400);
             """, slot_name)
         ok_img = check_export("with_image", None, "overflow")
 
         # Added blank page + export
-        driver.execute_async_script("""
+        time.sleep(1.0)
+        res_blank = driver.execute_async_script("""
             const cb = arguments[0];
-            window.nb2420Logbook.insertBlankPage().then(() => cb(true));
+            window.nb2420Logbook.insertBlankPage().then(() => cb('ok')).catch(e => cb(String(e)));
         """)
+        assert res_blank == 'ok', f"insertBlankPage failed: {res_blank}"
         ok_page = check_export("with_added_page", None, "overflow")
         snap("06_added_page_and_delete_btn", ["#lbDeletePage"], ok_text and ok_all and ok_shrink and ok_img and ok_page,
              "All 5 export/metadata checks passed")
@@ -299,11 +312,11 @@ def run_suite():
         driver.execute_script("document.querySelector('.lb-modal button')?.click();")
         time.sleep(0.2)
 
-        # 8. Clear saved work confirms (1st neutral, 2nd red)
+        # 8. Clear saved work confirms (both red)
         driver.execute_script("document.getElementById('lbPrivacy').click(); document.getElementById('lbClearThis').click();")
         time.sleep(0.3)
         c1_danger = driver.execute_script("return document.getElementById('lbConfirmOk')?.classList.contains('lb-danger');")
-        snap("08a_clear_confirm1_neutral", ["#lbConfirmOk", ".lb-modal h2"], c1_danger is False, f"danger={c1_danger}")
+        snap("08a_clear_confirm1_red", ["#lbConfirmOk", ".lb-modal h2"], c1_danger is True, f"danger={c1_danger}")
         driver.execute_script("document.getElementById('lbConfirmOk').click();")
         time.sleep(0.3)
         c2_danger = driver.execute_script("return document.getElementById('lbConfirmOk')?.classList.contains('lb-danger');")
