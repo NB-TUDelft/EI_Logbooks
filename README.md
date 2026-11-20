@@ -45,7 +45,9 @@ It first copies the logbooks from the course book into `templates/`, then
 publishes the site on GitHub Pages. Only when a logbook (or the build tools)
 changed does it rebuild the PDFs, with the newest version of the
 [renderer](https://github.com/NB-TUDelft/sphinx-typst-render), and commit them
-together with the copied logbooks, the logbook list and the links above. So a
-change in the book is on the site the next morning. To do it straight away:
+together with the copied logbooks, the logbook list and the links above. A
+change in the book is on the site the next morning, or within minutes once the
+book's workflow tells this one (a `book-logbooks-changed` repository dispatch).
+To do it straight away:
 **Actions** → *build and publish* → **Run workflow**. If it fails with "No artifacts named
 github-pages", that is GitHub, not you: press **Re-run jobs**.
