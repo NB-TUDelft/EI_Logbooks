@@ -1,6 +1,7 @@
 """Copy the logbook templates from the course book into templates/.
 
 Usage: python tools/sync_templates.py [path to a checkout of the book]
+       python tools/sync_templates.py --check <path to a checkout of the book>
 Needs: git (only when no path is given)
 
 The course book (NB-TUDelft/Electronic_Instrumentation, book/manuals/weekN/)
@@ -10,6 +11,12 @@ import at our own logbook_common.typ, and removes templates/<n.m>_..._logbook.ty
 files the book no longer has. logbook_common.typ, highlight.txt, the README and
 files whose names don't match the pattern (the BACKUP starter) are ours and
 are left alone. The GitHub workflow runs it at the start of every run, at least hourly.
+
+It first checks the book and copies nothing if anything is wrong (a misnamed
+logbook, a number in the wrong week folder, two files with one number, an
+import the site doesn't have). It then exits with an error, so the workflow
+fails and the site keeps its last good version. --check only checks; the
+course book's own workflow runs that.
 
 Our logbook_common.typ is not copied: it has the site's extras (image boxes,
 bookmarks for the exercises). It warns when the book's copy defines something
@@ -30,9 +37,11 @@ TEMPLATES = REPO / 'templates'
 BOOK_REPO = os.environ.get('BOOK_REPO', 'https://github.com/NB-TUDelft/Electronic_Instrumentation')
 BOOK_BRANCH = os.environ.get('BOOK_BRANCH', 'main')
 MANUALS = 'book/manuals'
-NAME = re.compile(r'\d+\.\d+_.+_logbook\.typ')
-IMPORT = re.compile(r'#import\s+"(?:\.\./)+logbook_common\.typ"')
+NAME = re.compile(r'(\d+)\.(\d+)_[^\s/]+_logbook\.typ')
+IMPORT = re.compile(r'#import\s+"\.\./logbook_common\.typ"')
+FILE_USE = re.compile(r'#(?:import|include)\s+"([^"]+)"|\b(?:image|read|json|csv|yaml|toml)\(\s*"([^"]+)"')
 DEFINES = re.compile(r'^#let\s+([A-Za-z_][\w-]*)', re.M)
+HOW = 'name it <n.m>_<Title_with_underscores>_logbook.typ, e.g. 3.2_Active_filters_logbook.typ'
 
 
 def fetch(dest):
@@ -44,19 +53,44 @@ def fetch(dest):
     return run('-C', str(dest), 'rev-parse', '--short', 'HEAD')
 
 
-def sync(book):
+def check(book):
+    """The logbooks in the book, {file name: path}, and a list of problems."""
     manuals = book / MANUALS
-    found = {}
-    for src in sorted(manuals.glob('week*/*_logbook.typ')):
-        if not NAME.fullmatch(src.name):
-            print('skipped (name is not <n.m>_<Title>_logbook.typ):', src.relative_to(book))
+    found, numbers, problems = {}, {}, []
+    candidates = [p for p in manuals.glob('week*/**/*.typ') if 'logbook' in p.name.lower()]
+    for src in sorted(candidates):
+        rel = src.relative_to(book).as_posix()
+        m = NAME.fullmatch(src.name)
+        if not m:
+            problems.append(f'{rel}: looks like a logbook, but the name is wrong; {HOW}.')
             continue
-        if src.name in found:
-            sys.exit(f'two book files are both called {src.name}: '
-                     f'{found[src.name].relative_to(book)} and {src.relative_to(book)}')
+        if src.parent.parent != manuals:
+            problems.append(f'{rel}: put it directly in {MANUALS}/week{m[1]}/, not in a subfolder.')
+            continue
+        week = re.fullmatch(r'week(\d+)', src.parent.name)
+        if not week or int(week[1]) != int(m[1]):
+            problems.append(f'{rel}: logbook {m[1]}.{m[2]} belongs in {MANUALS}/week{m[1]}/.')
+        number = f'{m[1]}.{m[2]}'
+        if number in numbers:
+            problems.append(f'{rel} and {numbers[number]} both have number {number}; '
+                            'keep one (to merge or renumber, see templates/README.md in EI_Logbooks).')
+        numbers[number] = rel
+        for use in FILE_USE.finditer(src.read_text(encoding='utf-8')):
+            path = use[1] or use[2]
+            if path.startswith('@') or path == '../logbook_common.typ':
+                continue
+            problems.append(f'{rel}: uses "{path}", which the logbook site does not have. '
+                            'Only "../logbook_common.typ" can be imported.')
         found[src.name] = src
-    if not found:
-        sys.exit(f'no logbooks found in {MANUALS}/week*/ of the book; nothing changed')
+    if not found and not problems:
+        problems.append(f'no logbooks found in {MANUALS}/week*/ of the book.')
+    return found, problems
+
+
+def sync(book):
+    found, problems = check(book)
+    if problems:
+        fail(problems)
 
     changed = []
     for name, src in found.items():
@@ -70,7 +104,7 @@ def sync(book):
             changed.append(('removed', old.name))
             old.unlink()
 
-    theirs = manuals / 'logbook_common.typ'
+    theirs = book / MANUALS / 'logbook_common.typ'
     if theirs.exists():
         ours = set(DEFINES.findall((TEMPLATES / 'logbook_common.typ').read_text(encoding='utf-8')))
         missing = sorted(set(DEFINES.findall(theirs.read_text(encoding='utf-8'))) - ours)
@@ -80,9 +114,32 @@ def sync(book):
     return changed
 
 
+def fail(problems):
+    """Print what to fix (also on the run's summary page) and stop."""
+    text = ('The logbooks in the course book need a fix before the site can use them. '
+            'Nothing was copied; the site keeps its last good version.\n\n'
+            + '\n'.join(f'- {p}' for p in problems) + '\n')
+    print(text)
+    if os.environ.get('GITHUB_STEP_SUMMARY'):
+        with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+            f.write('### Logbooks: fix needed in the course book\n\n' + text)
+    for p in problems:                       # one red annotation per problem
+        if os.environ.get('GITHUB_ACTIONS'):
+            print(f'::error title=Logbook check::{p}')
+    sys.exit(1)
+
+
 def main():
-    if len(sys.argv) > 1:
-        book, commit = Path(sys.argv[1]).resolve(), 'local copy'
+    args = sys.argv[1:]
+    if args[:1] == ['--check']:
+        book = Path(args[1] if len(args) > 1 else '.').resolve()
+        found, problems = check(book)
+        if problems:
+            fail(problems)
+        print(f'{len(found)} logbooks, all fine')
+        return
+    if args:
+        book, commit = Path(args[0]).resolve(), 'local copy'
         changed = sync(book)
     else:
         with tempfile.TemporaryDirectory() as tmp:

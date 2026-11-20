@@ -5,7 +5,9 @@
 `book/manuals/weekN/<n.m>_<Title>_logbook.typ` (that becomes `?logbook=n.m`).
 [`sync_templates.py`](../tools/sync_templates.py) copies them here each time
 the workflow runs ([when](../README.md#how-it-publishes)). Hand edits here are
-overwritten; a logbook removed from the book disappears here too.
+overwritten (and the run fails, to say so); a logbook removed from the book
+disappears here too. If a logbook in the book has a problem, nothing is copied
+and the run fails with what to fix.
 
 Ours, not copied:
 
