@@ -7,7 +7,9 @@
 the workflow runs ([when](../README.md#how-it-publishes)). Hand edits here are
 overwritten (and the run fails, to say so); a logbook removed from the book
 disappears here too. If a logbook in the book has a problem, nothing is copied
-and the run fails with what to fix.
+and the run fails with what to fix. The book's own guide to writing entries is
+its AGENTS.md, section 12, and its "log book entries" workflow runs the same
+check on every pull request.
 
 Ours, not copied:
 
