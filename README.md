@@ -7,7 +7,7 @@ Everything runs in the student's own browser; nothing is uploaded.
 <!-- site-url -->
 **Site:** https://nb-tudelft.github.io/EI_Logbooks/
 
-**Highlighted on the start page:** nothing (change it in [`templates/highlight.txt`](templates/highlight.txt))
+**Highlighted on the start page:** 2.3 UPDATED Timed acquisitions (change it in [`templates/highlight.txt`](templates/highlight.txt))
 <!-- /site-url -->
 
 <details>
@@ -18,6 +18,7 @@ Everything runs in the student's own browser; nothing is uploaded.
 - [1.2 intro to oscilloscope and filters](https://nb-tudelft.github.io/EI_Logbooks/?logbook=1.2)
 - [2.1 Whack a mole](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.1)
 - [2.2 Timed acquisitions](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.2)
+- [2.3 UPDATED Timed acquisitions](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.3)
 - [3.1 aliasing and anti aliasing](https://nb-tudelft.github.io/EI_Logbooks/?logbook=3.1)
 - [4.1 opamp basics](https://nb-tudelft.github.io/EI_Logbooks/?logbook=4.1)
 - [4.2 real opamps](https://nb-tudelft.github.io/EI_Logbooks/?logbook=4.2)
