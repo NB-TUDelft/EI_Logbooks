@@ -21,14 +21,14 @@
     "id": "2.2",
     "title": "Timed acquisitions",
     "week": "week2",
-    "file": "2.2_Timed_acquisitions_logbook.pdf",
-    "highlight": true
+    "file": "2.2_Timed_acquisitions_logbook.pdf"
   },
   {
     "id": "3.1",
     "title": "aliasing and anti aliasing",
     "week": "week3",
-    "file": "3.1_aliasing_and_anti_aliasing_logbook.pdf"
+    "file": "3.1_aliasing_and_anti_aliasing_logbook.pdf",
+    "highlight": true
   },
   {
     "id": "4.1",
