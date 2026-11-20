@@ -45,8 +45,8 @@ book into `templates/`, rebuilds the PDFs if one changed, and publishes the site
 It runs:
 
 - on every push to `main` here;
-- when a logbook changes in the course book: its workflow sends a
-  `book-logbooks-changed` signal (not added to the book yet; needs its
+- when a logbook changes in the course book: its "log book entries" workflow
+  sends a `book-logbooks-changed` signal (once the book has its
   `LOGBOOKS_DISPATCH_TOKEN` secret);
 - every hour (only publishing when something changed);
 - by hand: **Actions** → *build and publish* → **Run workflow**.
@@ -54,5 +54,7 @@ It runs:
 A run fails, and publishes nothing, if a logbook in the book is misnamed, in
 the wrong week folder, doubled, imports something the site lacks or does not
 build, or if a logbook was edited here by hand. Its summary page says what to fix.
+The book runs the same check on its own pull requests, so most problems show up
+there first.
 
 "No artifacts named github-pages"? That is GitHub: press **Re-run jobs**.
