@@ -65,8 +65,10 @@ a.item:hover, a.item:focus-visible { border-color: var(--cyan); transform: trans
 <script>
 const viewer = file => 'pdfjs/web/viewer.html?file=' + encodeURIComponent('../../logbooks/' + file);
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-fetch('logbooks/index.json', { cache: 'no-cache' }).then(r => r.json()).then(list => {
-  const want = new URLSearchParams(location.search).get('logbook');
+const links = fetch('logbook/aliases.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : {}).then(j => (j && j.links) || {}).catch(() => ({}));
+fetch('logbooks/index.json', { cache: 'no-cache' }).then(r => r.json()).then(async list => {
+  let want = new URLSearchParams(location.search).get('logbook');
+  if (want) want = (await links)[want] || want;   // logbook/aliases.json "links"
   const hit = want && list.find(l => l.id === want);
   if (hit) { location.replace(viewer(hit.file)); return; }
   const box = document.getElementById('list');

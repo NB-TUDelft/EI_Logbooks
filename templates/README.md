@@ -36,6 +36,24 @@ and the site updates itself about a minute later.
 
 3. Push. Check the result on the site and export it once.
 
+## Students' saved work
+
+The editor keeps each student's work in their browser, keyed by the logbook
+**number** (`2.3`), not the file name. So you can rename a file, or have two files
+with the same number, and students keep their work. A changed file does not
+change saved work: the save is the student's whole PDF, so they keep the version
+they started on until they choose "Start fresh".
+
+To merge one logbook into another, or move saves to a new number, add a line to
+[`site/logbook/aliases.json`](../site/logbook/aliases.json):
+
+- `"keys": {"2.3": "2.2"}` moves every 2.3 save to 2.2 the next time a student
+  opens a logbook. If they already had a 2.2 save, the newest becomes their save
+  and the other stays available under "Use older save".
+- `"links": {"2.3": "2.2"}` sends `?logbook=2.3` links to 2.2.
+
+Add the alias before you delete the old file.
+
 ## Highlight
 
 [`highlight.txt`](highlight.txt) decides which logbooks sit in the box at the top

@@ -1,0 +1,5 @@
+{
+  "_readme": "Saves are keyed by logbook number. keys: old save key or number -> number its saves move to. links: ?logbook= number -> number to open. See templates/README.md.",
+  "keys": {},
+  "links": {}
+}

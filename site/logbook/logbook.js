@@ -48,6 +48,7 @@
   const app = () => window.PDFViewerApplication;
   const state = {
     id: null, filename: null, reopening: false, busy: false, onAnalysed: null,
+    saveKey: null,        // autosave key: the logbook number ("2.3"), see logbookId()
     slots: [],            // [{name, ordinal, rect:[x1,y1,x2,y2], exercise}]
     pageInfo: [],         // per page: {added, kind, exercise}
     exercises: [],        // [{title, page}] from bookmarks
@@ -66,7 +67,7 @@
       else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
       else el.setAttribute(k, v);
     }
-    for (const kid of kids) el.append(kid);
+    for (const kid of kids) if (kid != null && kid !== false) el.append(kid);
     return el;
   };
   const ansi = s => String(s).replace(/[‒-―]/g, '-').replace(/[^\x20-\x7e\xa0-\xff\n]/g, '?');
@@ -163,18 +164,82 @@
     };
   })();
 
+  // ------------------------------------------------- save keys and aliases
+  // Saves are keyed by logbook number ("2.3"), not by file name, so two files for
+  // the same logbook share one save and a renamed file keeps its students' work.
+  // logbook/aliases.json maps old keys or numbers to a new number ("keys") and
+  // ?logbook= links to another number ("links"). Saves made under a file name
+  // (before 2026-11-20) are moved to their number once, by migrateSaves().
+  let aliases = { keys: {}, links: {} };
+  const aliasesReady = fetch('../../logbook/aliases.json', { cache: 'no-cache' })
+    .then(r => r.ok ? r.json() : {})
+    .then(j => { aliases = { keys: (j && j.keys) || {}, links: (j && j.links) || {} }; })
+    .catch(() => {});
+  function logbookId(key) {
+    let k = String(key || '');
+    k = aliases.keys[k] || k;
+    const m = k.match(/^(\d+\.\d+)(?=[_ ]|$)/);
+    if (m) k = m[1];
+    return aliases.keys[k] || k;
+  }
+  const PREV = 'prev:';   // prev:<number>:<time> holds an older save of that logbook
+  const hasBytes = r => !!(r && r.bytes && r.bytes.length);
+
+  // Move every save to its logbook number. Nothing is deleted until the copy is
+  // read back. When two saves meet, the newest becomes the save and the other is
+  // kept as an older save the student can switch to.
+  let migration;
+  const migrateSaves = () => migration ||= (async () => {
+    for (const k of await idb.keys()) {
+      if (typeof k !== 'string' || k.startsWith(PREV)) continue;
+      const target = logbookId(k);
+      if (target === k) continue;
+      const rec = await idb.get(k);
+      if (!hasBytes(rec)) continue;
+      const cur = await idb.get(target);
+      let checks;
+      if (!hasBytes(cur)) {
+        await idb.put(target, rec);
+        checks = [[target, rec]];
+      } else {
+        const recNewer = String(rec.time) > String(cur.time);
+        const older = recNewer ? cur : rec, prevKey = `${PREV}${target}:${older.time}`;
+        await idb.put(prevKey, older);
+        checks = [[prevKey, older]];
+        if (recNewer) { await idb.put(target, rec); checks.push([target, rec]); }
+      }
+      let ok = true;
+      for (const [ck, want] of checks) {
+        const got = await idb.get(ck);
+        if (!hasBytes(got) || got.bytes.length !== want.bytes.length || got.time !== want.time) ok = false;
+      }
+      if (ok) await idb.del(k);
+      else console.warn('[logbook] could not move save', k, '→', target);
+    }
+  })().catch(err => console.warn('[logbook] save migration', err));
+
+  async function olderSaves(key) {
+    const out = [];
+    for (const k of await idb.keys()) {
+      if (typeof k !== 'string' || !k.startsWith(`${PREV}${key}:`)) continue;
+      const r = await idb.get(k);
+      if (hasBytes(r)) out.push({ key: k, rec: r });
+    }
+    return out.sort((x, y) => String(y.rec.time).localeCompare(String(x.rec.time)));
+  }
+
   async function autosaveNow(fromTransform = false) {
     const a = app(), doc = a && a.pdfDocument;
-    if (!doc || !state.id || doc !== state.doc) return; // id not (yet) for this document
+    if (!doc || !state.saveKey || doc !== state.doc) return; // id not (yet) for this document
     if ((state.busy && !fromTransform) || state.restorePending || state.otherTab || state.wiped) return;
     if (state.opCount === 0 && doc.annotationStorage.size === 0) return; // nothing changed yet
     const hash = doc.annotationStorage.serializable.hash + ':' + state.opCount;
     if (hash === state.lastHash) return;
-    const id = state.id;
+    const id = state.saveKey;
     if (!fromTransform) state.busy = true;
     try {
       const bytes = await doc.saveDocument();
-      if (a.pdfDocument !== doc || state.id !== id) return;
+      if (a.pdfDocument !== doc || state.saveKey !== id) return;
       await idb.put(id, { bytes, time: nowIso(), filename: state.filename });
       state.lastHash = hash;
       setSaveBadge('Saved in this browser ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
@@ -208,42 +273,38 @@
   async function offerRestore() {
     document.querySelectorAll('.lb-restore').forEach(b => b.remove());
     state.restorePending = false;
-    const id = state.id, doc = state.doc;
-    let rec = await idb.get(id), sibling = false;
-    if (!rec || !rec.bytes || !rec.bytes.length) {
-      // Two files can share a logbook number (2.3_UPDATED and 2.3_NEWEST). Saves are
-      // keyed by file name, so offer the newest save under another file with the same
-      // number. That save is never deleted from here; it is only copied in.
-      const prefix = (String(id).match(/^\d+\.\d+_/) || [])[0];
-      rec = null;
-      if (prefix) {
-        for (const k of await idb.keys()) {
-          if (typeof k !== 'string' || k === id || !k.startsWith(prefix)) continue;
-          const r = await idb.get(k);
-          if (r && r.bytes && r.bytes.length && (!rec || String(r.time) > String(rec.time))) rec = r;
-        }
-      }
-      sibling = !!rec;
-    }
-    if (!rec || !rec.bytes || state.doc !== doc) return;
-    const when = new Date(rec.time);
-    const label = when.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const id = state.saveKey, doc = state.doc;
+    await migrateSaves();
+    const rec = await idb.get(id);
+    if (!hasBytes(rec) || state.doc !== doc) return;
+    const older = (await olderSaves(id))[0];   // the newest older save, if any
+    const fmt = t => new Date(t).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const label = fmt(rec.time);
     // Until the student chooses, autosave must not overwrite the stored work.
     state.restorePending = true;
     const done = () => { bar.remove(); state.restorePending = false; };
+    const open = async bytes => {
+      if (state.doc !== doc) return;
+      try { await reopen(bytes); toast('Work restored.'); }
+      catch (err) { toast('Could not restore: ' + err.message); }
+    };
     const bar = $('div', { class: 'lb-restore', role: 'alert' },
       $('div', { class: 'lb-restore-text' }, $('strong', {}, 'Continue where you left off?'),
-        $('span', {}, sibling
-          ? `This browser has your work on logbook ${id.split('_')[0]} from ${label}, saved under the other ${id.split('_')[0]} file.`
-          : `This browser has your work on this logbook from ${label}.`)),
+        $('span', {}, `This browser has your work on this logbook from ${label}.`)),
       $('button', { id: 'lbRestoreYes', type: 'button', class: 'lb-btn lb-primary', onclick: async () => {
-        done();
-        if (state.doc !== doc) return;
-        try { await reopen(rec.bytes); toast('Work restored.'); }
-        catch (err) { toast('Could not restore: ' + err.message); }
+        done(); await open(rec.bytes);
       } }, 'Restore my work'),
+      older && $('button', { id: 'lbRestoreOlder', type: 'button', class: 'lb-btn', onclick: async () => {
+        // Swap: the current save becomes an older save, so nothing is lost.
+        done();
+        try {
+          await idb.put(`${PREV}${id}:${rec.time}`, rec);
+          await idb.put(id, older.rec);
+          await idb.del(older.key);
+        } catch (err) { toast('Could not switch saves: ' + err.message); return; }
+        await open(older.rec.bytes);
+      } }, `Use older save (${fmt(older.rec.time)})`),
       $('button', { id: 'lbRestoreNo', type: 'button', class: 'lb-btn', onclick: async () => {
-        if (sibling) { done(); return; }   // the other file's save stays where it is
         if (!await askConfirm('Start fresh?',
           `Your saved work from ${label} will be deleted from this browser and cannot be recovered.`,
           'Start fresh')) return;
@@ -308,6 +369,7 @@
       return { added, kind: kind && kind.decodeText ? kind.decodeText() : null, exercise: ex && ex.decodeText ? ex.decodeText() : null };
     });
     state.id = infoStr(KEY.id) || (a._docFilename || 'logbook.pdf').replace(/\.pdf$/i, '').replace(/[_ ]edited$/i, '');
+    state.saveKey = logbookId(state.id);
     const parse = (s, fallback) => { try { return s ? JSON.parse(s) : fallback; } catch (_) { return fallback; } };
     state.images = parse(infoStr(KEY.images), {});
     state.exercises = await readOutline(doc);
@@ -1097,7 +1159,16 @@
       `Your progress for ${what} cannot be recovered afterwards. Close other tabs with a logbook first, or they will save it again.`,
       all ? 'Delete everything' : 'Delete my work')) return;
     state.wiped = true;
-    const ok = all ? await idb.wipeAll() : await idb.wipe(state.id);
+    let ok = true;
+    if (all) ok = await idb.wipeAll();
+    else {
+      // This logbook's save, its older saves, and any save not yet moved to its number.
+      for (const k of await idb.keys()) {
+        if (typeof k !== 'string') continue;
+        if (k === state.saveKey || k.startsWith(`${PREV}${state.saveKey}:`) || (!k.startsWith(PREV) && logbookId(k) === state.saveKey))
+          ok = (await idb.wipe(k)) && ok;
+      }
+    }
     toast(ok ? `Saved work for ${what} deleted. Reloading…` : 'Some saved work could not be removed.', 4000);
     if (ok) setTimeout(() => location.reload(), 1200);
   }
@@ -1311,8 +1382,8 @@
   // Tell other tabs which logbook is open here; the later tab turns its autosave off.
   const channel = 'BroadcastChannel' in window ? new BroadcastChannel('nb2420-logbooks') : null;
   if (channel) channel.onmessage = ({ data }) => {
-    if (!data || data.id !== state.id || !state.id) return;
-    if (data.type === 'hello' && !state.otherTab) channel.postMessage({ type: 'taken', id: state.id });
+    if (!data || data.id !== state.saveKey || !state.saveKey) return;
+    if (data.type === 'hello' && !state.otherTab) channel.postMessage({ type: 'taken', id: state.saveKey });
     if (data.type === 'taken' && !state.otherTab) {
       state.otherTab = true;
       setSaveBadge('Autosave off: open in another tab');
@@ -1333,6 +1404,7 @@
       state.otherTab = false;
     }
     const doc = a.pdfDocument;
+    await aliasesReady;   // logbookId() in analyse() needs the alias map
     await analyse();
     if (a.pdfDocument !== doc) return; // another file was opened meanwhile
     state.doc = doc;
@@ -1344,7 +1416,7 @@
     if (state.onAnalysed) { state.onAnalysed(); state.onAnalysed = null; }
     if (fresh) {
       setSaveBadge('');
-      if (channel) channel.postMessage({ type: 'hello', id: state.id });
+      if (channel) channel.postMessage({ type: 'hello', id: state.saveKey });
       await offerRestore();
     }
   }
