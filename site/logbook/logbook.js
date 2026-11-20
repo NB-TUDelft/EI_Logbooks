@@ -138,6 +138,7 @@
     };
     return {
       get: k => tx('readonly', s => s.get(k)).catch(() => null),
+      keys: () => tx('readonly', s => s.getAllKeys()).catch(() => []),
       put: (k, v) => tx('readwrite', s => s.put(v, k)), // throws, so autosave can say it failed
       del: k => tx('readwrite', s => s.delete(k)).catch(() => null),
       // Privacy: remove saved work. If deleting fails, overwrite it with nothing first.
@@ -208,7 +209,22 @@
     document.querySelectorAll('.lb-restore').forEach(b => b.remove());
     state.restorePending = false;
     const id = state.id, doc = state.doc;
-    const rec = await idb.get(id);
+    let rec = await idb.get(id), sibling = false;
+    if (!rec || !rec.bytes || !rec.bytes.length) {
+      // Two files can share a logbook number (2.3_UPDATED and 2.3_NEWEST). Saves are
+      // keyed by file name, so offer the newest save under another file with the same
+      // number. That save is never deleted from here; it is only copied in.
+      const prefix = (String(id).match(/^\d+\.\d+_/) || [])[0];
+      rec = null;
+      if (prefix) {
+        for (const k of await idb.keys()) {
+          if (typeof k !== 'string' || k === id || !k.startsWith(prefix)) continue;
+          const r = await idb.get(k);
+          if (r && r.bytes && r.bytes.length && (!rec || String(r.time) > String(rec.time))) rec = r;
+        }
+      }
+      sibling = !!rec;
+    }
     if (!rec || !rec.bytes || state.doc !== doc) return;
     const when = new Date(rec.time);
     const label = when.toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -217,7 +233,9 @@
     const done = () => { bar.remove(); state.restorePending = false; };
     const bar = $('div', { class: 'lb-restore', role: 'alert' },
       $('div', { class: 'lb-restore-text' }, $('strong', {}, 'Continue where you left off?'),
-        $('span', {}, `This browser has your work on this logbook from ${label}.`)),
+        $('span', {}, sibling
+          ? `This browser has your work on logbook ${id.split('_')[0]} from ${label}, saved under the other ${id.split('_')[0]} file.`
+          : `This browser has your work on this logbook from ${label}.`)),
       $('button', { id: 'lbRestoreYes', type: 'button', class: 'lb-btn lb-primary', onclick: async () => {
         done();
         if (state.doc !== doc) return;
@@ -225,6 +243,7 @@
         catch (err) { toast('Could not restore: ' + err.message); }
       } }, 'Restore my work'),
       $('button', { id: 'lbRestoreNo', type: 'button', class: 'lb-btn', onclick: async () => {
+        if (sibling) { done(); return; }   // the other file's save stays where it is
         if (!await askConfirm('Start fresh?',
           `Your saved work from ${label} will be deleted from this browser and cannot be recovered.`,
           'Start fresh')) return;

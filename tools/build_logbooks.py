@@ -68,7 +68,7 @@ def write_index(entries):
     hl = highlighted()
     for e in entries:
         e.pop('highlight', None)
-        if e['id'] in hl:
+        if e['id'] in hl or e['file'][:-4] in hl:   # an id, or one exact file stem when two files share an id
             e['highlight'] = True
     (OUT / 'index.json').write_text(json.dumps(entries, indent=2) + '\n', encoding='utf-8')
 

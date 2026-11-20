@@ -3,4 +3,5 @@
 # until a later line takes over. A line without a date always applies.
 # The site checks every night, so a future line switches the box by itself.
 # Only ids on the latest line that has started are shown. "none" = no box.
-2.3
+# Two files with the same id (2.3)? Name the file without .typ to show just that one.
+2.3_NEWEST_Timed_acquisitions_logbook
