@@ -204,8 +204,11 @@ body.lb-custom .annotationLayer :is(.textWidgetAnnotation, .choiceWidgetAnnotati
 .lb-ov-btn:disabled { opacity: .45; cursor: not-allowed; background: #f1f5f9; color: #64748b; }
 
 /* Live hints next to a text box: characters left, and text that will move on export. */
-.lb-hint { position: absolute; z-index: 30; pointer-events: none; max-width: 340px; padding: 4px 8px; border-radius: 7px;
-  font: 500 12px/1.35 var(--lb-font); color: #fff; background: var(--lb-ink); box-shadow: 0 4px 14px rgba(16, 24, 40, .25); }
+/* Sized with the page zoom (--total-scale-factor is 1.33 at 100%), within readable limits. */
+.lb-hint { position: absolute; z-index: 30; pointer-events: none; border-radius: 7px;
+  max-width: clamp(240px, calc(255px * var(--total-scale-factor)), 520px);
+  padding: clamp(3px, calc(3px * var(--total-scale-factor)), 6px) clamp(6px, calc(6px * var(--total-scale-factor)), 12px);
+  font: 500 clamp(11px, calc(9px * var(--total-scale-factor)), 20px)/1.35 var(--lb-font); color: #fff; background: var(--lb-ink); box-shadow: 0 4px 14px rgba(16, 24, 40, .25); }
 .lb-hint.lb-warn { background: #8a5a00; }
 .lb-mirror { position: absolute; inset: 0; overflow: hidden; pointer-events: none; color: transparent; white-space: pre-wrap; overflow-wrap: break-word; }
 .lb-mirror mark { background: rgba(255, 214, 0, .6); color: transparent; border-radius: 2px; }

@@ -53,7 +53,7 @@
     pageInfo: [],         // per page: {added, kind, exercise}
     exercises: [],        // [{title, page}] from bookmarks
     images: {},           // metadata log, mirrors Info /LogbookImages
-    lastHash: null, savedHash: null, opCount: 0,
+    lastHash: null, opCount: 0,
     doc: null,            // the pdfDocument that state.id belongs to
     restorePending: false, // restore bar shown: do not overwrite the stored work
     otherTab: false,      // same logbook open in another tab: autosave off here
@@ -252,16 +252,10 @@
   }
   setInterval(autosaveNow, AUTOSAVE_MS);
 
-  // Leaving with changes that were never saved to a file: ask first.
-  window.addEventListener('beforeunload', e => {
-    if (!state.wiped && state.lastHash && state.lastHash !== state.savedHash && state.opCountOrEdits()) {
-      e.preventDefault(); e.returnValue = '';
-    }
-  });
-  state.opCountOrEdits = () => {
-    const doc = app() && app().pdfDocument;
-    return state.opCount > 0 || (doc && doc.annotationStorage.size > 0);
-  };
+  // No "leave site?" prompt: autosave keeps the work. pdf.js asks on its own once
+  // a field changes; this capture listener on window is added before pdf.js
+  // loads (this script runs first), so it runs first and stops pdf.js's.
+  window.addEventListener('beforeunload', e => e.stopImmediatePropagation(), true);
 
   let badge;
   function setSaveBadge(text, tone = '') {
@@ -659,13 +653,17 @@
     return fieldFontBytes;
   }
 
+  // Lines as a textarea shows them: every space counts (leading and repeated
+  // spaces too), a space at the end of a full line hangs there, and an empty
+  // paragraph is an empty line.
   function wrapLines(text, font, size, width) {
     const out = [];
     for (const para of text.split('\n')) {
-      let line = '';
-      for (const word of para.split(/ +/)) {
-        const tryLine = line ? line + ' ' + word : word;
+      let line = null;                                            // null: nothing on this line yet
+      for (const word of para.split(' ')) {
+        const tryLine = line === null ? word : line + ' ' + word;
         if (font.widthOfTextAtSize(tryLine, size) <= width) { line = tryLine; continue; }
+        if (word === '') continue;                                // extra space at a line end
         if (line) out.push(line);
         line = '';
         let piece = '';
@@ -675,7 +673,7 @@
         }
         line = piece;
       }
-      out.push(line);
+      out.push(line ?? '');
     }
     return out;
   }
@@ -702,12 +700,12 @@
     }
     return null;
   }
-  // Where a too-long answer is cut: after the last ".", "!", or "?" whose text still fits
-  // (leaving `extraLines` free for the reference); else the last space; else 0.
+  // Where a too-long answer is cut: after the last ".", "!", "?" or line break whose text
+  // still fits (leaving `extraLines` free for the reference); else the last space; else 0.
   function splitPoint(font, text, w, h, size, extraLines) {
     const ok = n => fitsAt(font, text.slice(0, n).trimEnd(), true, w, h, size, extraLines);
     let best = 0;
-    for (const m of text.matchAll(/[.!?](?=\s|$)/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
+    for (const m of text.matchAll(/[.!?](?=\s|$)|\n/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
     if (best) return best;
     for (const m of text.matchAll(/\s+/g)) { if (ok(m.index)) best = m.index; else break; }
     return best;
@@ -1006,7 +1004,6 @@
       const bytes = await flattenedBytes();
       if (!bytes) { setSaveBadge('Export cancelled', 'warn'); return; }
       downloadBytes(bytes, (state.id || 'logbook') + '.pdf');
-      state.savedHash = state.lastHash;
       setSaveBadge('Exported ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
       toast('Exported. Hand in this PDF on Brightspace. You can always come back here to change your work and export again.', 7000);
     } catch (err) {
@@ -1289,6 +1286,14 @@
     measurer.avg = size => measurer.widthOfTextAtSize('etaoinshrdlucmfwyp ', size) / 19;
     return measurer;
   }
+  // Every live box's update(). The yellow mark copies the box's size in px, so
+  // it is redrawn after each zoom (onZoom).
+  const liveUpdates = new Set();
+  let zoomFrame = 0;
+  const onZoom = () => {
+    cancelAnimationFrame(zoomFrame);
+    zoomFrame = requestAnimationFrame(() => { for (const u of [...liveUpdates]) u(); });
+  };
   const fieldsByPage = {};                                        // pageNumber -> Promise<[{id, rect, multi, start}]>
   function pageFields(pageNumber) {
     if (!fieldsByPage[pageNumber]) {
@@ -1328,17 +1333,21 @@
         if (!el || el.dataset.lbHint) continue;
         el.dataset.lbHint = '1';
         const section = el.parentElement;
-        let mirror = null, hint = null;
+        let mirror = null, hint = null, sbWidth = 0;
+        // Sizes and positions as calc(... * var(--total-scale-factor)), like pdf.js's
+        // own, so they follow the zoom without being set again.
+        const scaled = px => `calc(${px}px * var(--total-scale-factor))`;
         const place = () => {
           const v = pv.viewport;
           const [ax, ay] = v.convertToViewportPoint(f.b.x1, f.b.y1);
           const [bx, by] = v.convertToViewportPoint(f.b.x2, f.b.y2);
-          return { left: Math.min(ax, bx), top: Math.max(ay, by) + 3 };
+          return { left: scaled(Math.min(ax, bx) / v.scale), top: scaled((Math.max(ay, by) + 3) / v.scale) };
         };
         const update = () => {
+          if (!el.isConnected) { liveUpdates.delete(update); return; }
           const text = el.value.replace(/\r\n?/g, '\n');
           const livePt = fitSize(font, text, f.multi, f.b.w, f.b.h, f.start) || MIN_PT;
-          el.style.fontSize = (livePt * pv.viewport.scale) + 'px';
+          el.style.fontSize = scaled(livePt);
           const m = measure(f, font, text);
           if (!f.multi) {
             const own = +(el.dataset.lbOwnMax ??= String(el.maxLength > 0 ? el.maxLength : Infinity));
@@ -1352,7 +1361,10 @@
               mirror.style[p] = cs[p];
             mirror.style.borderColor = 'transparent';
             mirror.style.right = 'auto';
-            mirror.style.width = el.clientWidth + 'px';
+            // As wide as the box minus its scrollbar, so lines wrap where the box wraps them.
+            // Measured only while the box is shown: pdf.js hides the layer for a moment on zoom.
+            if (el.offsetWidth) sbWidth = el.offsetWidth - el.clientWidth - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+            mirror.style.width = `calc(100% - ${sbWidth}px)`;
             mirror.replaceChildren(document.createTextNode(text.slice(0, m.cut)), $('mark', {}, text.slice(m.cut) || ' '));
             mirror.scrollTop = el.scrollTop;
           } else if (mirror) { mirror.remove(); mirror = null; }
@@ -1367,8 +1379,9 @@
           if (!hint || !hint.isConnected) { hint = $('div', { class: 'lb-hint', role: 'status' }); pv.div.append(hint); }
           hint.className = 'lb-hint' + (m.moved || m.left <= 0 ? ' lb-warn' : '');
           hint.textContent = msg;
-          Object.assign(hint.style, Object.fromEntries(Object.entries(place()).map(([k, v]) => [k, v + 'px'])));
+          Object.assign(hint.style, place());
         };
+        liveUpdates.add(update);
         el.addEventListener('input', update);
         el.addEventListener('focus', update);
         el.addEventListener('blur', update);
@@ -1400,7 +1413,6 @@
       state.filename = a._docFilename || 'logbook.pdf';
       state.opCount = 0;
       state.lastHash = null;
-      state.savedHash = null;
       state.otherTab = false;
     }
     const doc = a.pdfDocument;
@@ -1429,7 +1441,6 @@
     const orig = a.download.bind(a);
     originals.download = async () => {
       await orig();
-      state.savedHash = state.lastHash;
       setSaveBadge('Editable copy downloaded', 'ok');
     };
     a.downloadOrSave = async () => {
@@ -1452,7 +1463,7 @@
     a.initializedPromise.then(() => {
       wrapSave(a);
       buildBar();
-      a.eventBus.on('scalechanging', syncZoom);
+      a.eventBus.on('scalechanging', () => { syncZoom(); onZoom(); });
       a.eventBus.on('pagesloaded', () => { syncPage(); syncZoom(); });
       a.eventBus.on('annotationeditormodechanged', ({ mode }) => syncMode(mode));
       a.eventBus.on('documentloaded', () => onDocumentLoaded().catch(err => {
