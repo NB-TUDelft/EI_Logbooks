@@ -53,7 +53,7 @@
     pageInfo: [],         // per page: {added, kind, exercise}
     exercises: [],        // [{title, page}] from bookmarks
     images: {},           // metadata log, mirrors Info /LogbookImages
-    lastHash: null, savedHash: null, opCount: 0,
+    lastHash: null, opCount: 0,
     doc: null,            // the pdfDocument that state.id belongs to
     restorePending: false, // restore bar shown: do not overwrite the stored work
     otherTab: false,      // same logbook open in another tab: autosave off here
@@ -245,23 +245,17 @@
       setSaveBadge('Saved in this browser ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
     } catch (err) {
       console.warn('[logbook] autosave failed', err);
-      setSaveBadge('Not saved in this browser: export to keep your work', 'warn');
+      setSaveBadge('Not saved. Export to keep your work.', 'warn');
     } finally {
       if (!fromTransform) state.busy = false;
     }
   }
   setInterval(autosaveNow, AUTOSAVE_MS);
 
-  // Leaving with changes that were never saved to a file: ask first.
-  window.addEventListener('beforeunload', e => {
-    if (!state.wiped && state.lastHash && state.lastHash !== state.savedHash && state.opCountOrEdits()) {
-      e.preventDefault(); e.returnValue = '';
-    }
-  });
-  state.opCountOrEdits = () => {
-    const doc = app() && app().pdfDocument;
-    return state.opCount > 0 || (doc && doc.annotationStorage.size > 0);
-  };
+  // No "leave site?" prompt: autosave keeps the work. pdf.js asks on its own once
+  // a field changes; this capture listener on window is added before pdf.js
+  // loads (this script runs first), so it runs first and stops pdf.js's.
+  window.addEventListener('beforeunload', e => e.stopImmediatePropagation(), true);
 
   let badge;
   function setSaveBadge(text, tone = '') {
@@ -451,7 +445,7 @@
       return result;
     } catch (err) {
       console.error('[logbook]', err);
-      toast('That did not work: ' + err.message);
+      toast('Something went wrong: ' + err.message);
     } finally {
       state.busy = false;
       document.body.classList.remove('lb-busy');
@@ -622,7 +616,7 @@
     const select = $('select', { class: 'lb-select', 'aria-label': 'Exercise' },
       ...choices.map(c => { const o = $('option', {}, c); if (c === preselect) o.selected = true; return o; }));
     return modal('Add image page', [
-      $('p', { class: 'lb-modal-text' }, 'The image goes on a new page at the end of your logbook, with a box for notes.'),
+      $('p', { class: 'lb-modal-text' }, 'The image goes on a new page at the end, with a box for notes.'),
       $('label', { class: 'lb-field' }, $('span', {}, 'Which exercise is it for?'), select)],
       [{ text: 'Cancel', value: null }, { text: 'Choose image', primary: true, id: 'lbExerciseOk', value: () => select.value }]);
   }
@@ -659,13 +653,17 @@
     return fieldFontBytes;
   }
 
+  // Lines as a textarea shows them: every space counts (leading and repeated
+  // spaces too), a space at the end of a full line hangs there, and an empty
+  // paragraph is an empty line.
   function wrapLines(text, font, size, width) {
     const out = [];
     for (const para of text.split('\n')) {
-      let line = '';
-      for (const word of para.split(/ +/)) {
-        const tryLine = line ? line + ' ' + word : word;
+      let line = null;                                            // null: nothing on this line yet
+      for (const word of para.split(' ')) {
+        const tryLine = line === null ? word : line + ' ' + word;
         if (font.widthOfTextAtSize(tryLine, size) <= width) { line = tryLine; continue; }
+        if (word === '') continue;                                // extra space at a line end
         if (line) out.push(line);
         line = '';
         let piece = '';
@@ -675,7 +673,7 @@
         }
         line = piece;
       }
-      out.push(line);
+      out.push(line ?? '');
     }
     return out;
   }
@@ -702,12 +700,12 @@
     }
     return null;
   }
-  // Where a too-long answer is cut: after the last ".", "!", or "?" whose text still fits
-  // (leaving `extraLines` free for the reference); else the last space; else 0.
+  // Where a too-long answer is cut: after the last ".", "!", "?" or line break whose text
+  // still fits (leaving `extraLines` free for the reference); else the last space; else 0.
   function splitPoint(font, text, w, h, size, extraLines) {
     const ok = n => fitsAt(font, text.slice(0, n).trimEnd(), true, w, h, size, extraLines);
     let best = 0;
-    for (const m of text.matchAll(/[.!?](?=\s|$)/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
+    for (const m of text.matchAll(/[.!?](?=\s|$)|\n/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
     if (best) return best;
     for (const m of text.matchAll(/\s+/g)) { if (ok(m.index)) best = m.index; else break; }
     return best;
@@ -747,19 +745,19 @@
   // Ask once, on export, what to do with every answer that does not fit its box.
   // Resolves to {name: 'all' | 'overflow' | 'shrink'} or null on cancel.
   function askOverflow(items) {
-    const picked = Object.fromEntries(items.map(it => [it.name, 'overflow']));
+    const picked = Object.fromEntries(items.map(it => [it.name, it.shrinkTo ? 'shrink' : 'overflow']));
     const table = $('div', { class: 'lb-overflow-table' },
       $('div', { class: 'lb-ov-head' },
         $('span', {}, 'Question'),
-        $('span', {}, 'Move overflow'),
-        $('span', {}, 'Move all text'),
-        $('span', {}, 'Shrink to fit')));
+        $('span', {}, 'Move the rest'),
+        $('span', {}, 'Move all'),
+        $('span', {}, 'Shrink text')));
     for (const it of items) {
       const rowBtns = [];
       const optDefs = [
-        ['overflow', 'Move overflow', 'lb-ov-overflow', false],
+        ['overflow', 'Move the rest', 'lb-ov-overflow', !!it.shrinkTo],
         ['all', 'Move all', 'lb-ov-all', false],
-        ['shrink', it.shrinkTo ? `Shrink (${it.shrinkTo} pt)` : 'Too long (6 pt)', 'lb-ov-shrink', !it.shrinkTo],
+        ['shrink', it.shrinkTo ? `Shrink (${it.shrinkTo} pt)` : 'Too long to shrink', 'lb-ov-shrink', !it.shrinkTo],
       ];
       for (const [val, label, cls, isDisabled] of optDefs) {
         const b = $('button', {
@@ -783,12 +781,12 @@
       table.append($('div', { class: 'lb-ov-row' },
         $('div', { class: 'lb-ov-q' },
           $('strong', {}, it.label),
-          $('span', {}, `page ${it.page} · +${it.extra} chars`)),
+          $('span', {}, it.extra ? `page ${it.page} · ${it.extra} characters too many` : `page ${it.page}`)),
         ...rowBtns));
     }
-    return modal('Some answers do not fit', [
-      $('p', { class: 'lb-modal-text' }, 'These boxes have a fixed size. Pick an option per question. ' +
-        'Moved text goes to a new page at the end (cut off at the last . / ! / ?), and the box says where it continues.'),
+    return modal('Some answers are too long', [
+      $('p', { class: 'lb-modal-text' }, 'Boxes can\'t grow. Choose what to do with each answer. ' +
+        'Moved text goes to an extra page at the end, after a full stop or a new line. The box says where it continues.'),
       table],
       [{ text: 'Cancel', value: null },
        { text: 'Export', primary: true, id: 'lbOverflowOk', value: () => ({ ...picked }) }],
@@ -932,10 +930,13 @@
       if (!(t.ff & 4096) || !t.value.trim()) continue;
       const b = boxOf(t.rect), txt = clean(t.value), start = startSize(t.ff, daSize(t.da), b.h);
       if (fitsAt(font, txt, true, b.w, b.h, start)) continue;
-      const cut = splitPoint(font, txt, b.w, b.h, start, 1);
+      // Same rule as the live view: text shrinks down to MIN_PT, and only what does
+      // not fit even then (the yellow part) is moved. Text that fits when shrunk has
+      // nothing to move: it is shrunk, or moved whole.
+      const shrinkTo = fitSize(font, txt, true, b.w, b.h, start);
+      const cut = shrinkTo ? txt.length : splitPoint(font, txt, b.w, b.h, MIN_PT, 1);
       Object.assign(t, { txt, cut });
-      over.push({ name: t.name, label: t.label, page: t.pageNo, extra: txt.length - cut,
-        shrinkTo: fitSize(font, txt, true, b.w, b.h, start), t });
+      over.push({ name: t.name, label: t.label, page: t.pageNo, extra: txt.length - cut, shrinkTo, t });
     }
     const choice = over.length ? await decide(over) : {};
     if (!choice) return null;                                     // export cancelled
@@ -944,6 +945,7 @@
     for (const o of over) {
       let c = choice[o.name] || 'overflow';
       if (c === 'shrink' && !o.shrinkTo) c = 'overflow';
+      if (c === 'overflow' && o.shrinkTo) c = 'shrink';           // nothing to move: shrink, as the live view shows
       if (c === 'shrink') { o.t.opts = { size: o.shrinkTo }; exact.overflow[o.name] = { choice: c, size: o.shrinkTo }; continue; }
       const kept = c === 'all' ? '' : o.t.txt.slice(0, o.t.cut).trimEnd();
       const moved = c === 'all' ? o.t.txt : o.t.txt.slice(o.t.cut).trimStart();
@@ -1006,9 +1008,8 @@
       const bytes = await flattenedBytes();
       if (!bytes) { setSaveBadge('Export cancelled', 'warn'); return; }
       downloadBytes(bytes, (state.id || 'logbook') + '.pdf');
-      state.savedHash = state.lastHash;
       setSaveBadge('Exported ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
-      toast('Exported. Hand in this PDF on Brightspace. You can always come back here to change your work and export again.', 7000);
+      toast('Exported. Hand in this PDF on Brightspace. You can come back to change it and export again.', 7000);
     } catch (err) {
       console.error('[logbook] export failed', err);
       setSaveBadge('Export failed', 'warn');
@@ -1153,10 +1154,10 @@
   async function clearSaved(all) {
     const what = all ? 'all logbooks' : 'this logbook';
     if (!await askConfirm(`Delete saved work for ${what}?`,
-      `This removes your progress for ${what} from this browser. Anything you have not exported as a PDF will be lost.`,
+      `This removes your work on ${what} from this browser. Anything you haven't exported is lost.`,
       'Continue')) return;
     if (!await askConfirm('Are you sure?',
-      `Your progress for ${what} cannot be recovered afterwards. Close other tabs with a logbook first, or they will save it again.`,
+      'You can\'t get it back. Close other logbook tabs first, or they will save it again.',
       all ? 'Delete everything' : 'Delete my work')) return;
     state.wiped = true;
     let ok = true;
@@ -1289,6 +1290,14 @@
     measurer.avg = size => measurer.widthOfTextAtSize('etaoinshrdlucmfwyp ', size) / 19;
     return measurer;
   }
+  // Every live box's update(). The yellow mark copies the box's font and padding
+  // in px, so it is redrawn after each zoom (onZoom).
+  const liveUpdates = new Set();
+  let zoomFrame = 0;
+  const onZoom = () => {
+    cancelAnimationFrame(zoomFrame);
+    zoomFrame = requestAnimationFrame(() => { for (const u of [...liveUpdates]) u(); });
+  };
   const fieldsByPage = {};                                        // pageNumber -> Promise<[{id, rect, multi, start}]>
   function pageFields(pageNumber) {
     if (!fieldsByPage[pageNumber]) {
@@ -1328,17 +1337,21 @@
         if (!el || el.dataset.lbHint) continue;
         el.dataset.lbHint = '1';
         const section = el.parentElement;
-        let mirror = null, hint = null;
+        let mirror = null, hint = null, sbWidth = 0;
+        // Sizes and positions as calc(... * var(--total-scale-factor)), like pdf.js's
+        // own, so they follow the zoom without being set again.
+        const scaled = px => `calc(${px}px * var(--total-scale-factor))`;
         const place = () => {
           const v = pv.viewport;
           const [ax, ay] = v.convertToViewportPoint(f.b.x1, f.b.y1);
           const [bx, by] = v.convertToViewportPoint(f.b.x2, f.b.y2);
-          return { left: Math.min(ax, bx), top: Math.max(ay, by) + 3 };
+          return { left: scaled(Math.min(ax, bx) / v.scale), top: scaled((Math.max(ay, by) + 3) / v.scale) };
         };
         const update = () => {
+          if (!el.isConnected) { liveUpdates.delete(update); return; }
           const text = el.value.replace(/\r\n?/g, '\n');
           const livePt = fitSize(font, text, f.multi, f.b.w, f.b.h, f.start) || MIN_PT;
-          el.style.fontSize = (livePt * pv.viewport.scale) + 'px';
+          el.style.fontSize = scaled(livePt);
           const m = measure(f, font, text);
           if (!f.multi) {
             const own = +(el.dataset.lbOwnMax ??= String(el.maxLength > 0 ? el.maxLength : Infinity));
@@ -1352,23 +1365,27 @@
               mirror.style[p] = cs[p];
             mirror.style.borderColor = 'transparent';
             mirror.style.right = 'auto';
-            mirror.style.width = el.clientWidth + 'px';
+            // As wide as the box minus its scrollbar, so lines wrap where the box wraps them.
+            // Measured only while the box is shown: pdf.js hides the layer for a moment on zoom.
+            if (el.offsetWidth) sbWidth = el.offsetWidth - el.clientWidth - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+            mirror.style.width = `calc(100% - ${sbWidth}px)`;
             mirror.replaceChildren(document.createTextNode(text.slice(0, m.cut)), $('mark', {}, text.slice(m.cut) || ' '));
             mirror.scrollTop = el.scrollTop;
           } else if (mirror) { mirror.remove(); mirror = null; }
           // the hint, only while this box has focus
           const focused = document.activeElement === el;
           let msg = null;
-          if (focused && m.moved) msg = `This text will get moved to a new page in export (cut off at the last . / ! / ?; ${m.moved} chars). You can also shrink the text on export, or select Add a text page if you want to write more.`;
-          else if (focused && m.left <= 0) msg = '0 characters left. If you want to write more, select Add a text page.';
+          if (focused && m.moved) msg = 'Too long for this box. When you export, the yellow part moves to an extra page, after a full stop or a new line.';
+          else if (focused && m.left <= 0) msg = 'This box is full. To write more, add a Text page.';
           else if (focused && m.left <= HINT_FROM) msg = `${m.left} characters left`;
           if (focused) for (const other of document.querySelectorAll('.lb-hint')) if (other !== hint) other.remove();   // one at a time
           if (!msg) { if (hint) { hint.remove(); hint = null; } return; }
           if (!hint || !hint.isConnected) { hint = $('div', { class: 'lb-hint', role: 'status' }); pv.div.append(hint); }
           hint.className = 'lb-hint' + (m.moved || m.left <= 0 ? ' lb-warn' : '');
           hint.textContent = msg;
-          Object.assign(hint.style, Object.fromEntries(Object.entries(place()).map(([k, v]) => [k, v + 'px'])));
+          Object.assign(hint.style, place());
         };
+        liveUpdates.add(update);
         el.addEventListener('input', update);
         el.addEventListener('focus', update);
         el.addEventListener('blur', update);
@@ -1386,8 +1403,8 @@
     if (data.type === 'hello' && !state.otherTab) channel.postMessage({ type: 'taken', id: state.saveKey });
     if (data.type === 'taken' && !state.otherTab) {
       state.otherTab = true;
-      setSaveBadge('Autosave off: open in another tab');
-      toast('This logbook is also open in another tab. Autosave is off here, so keep working in one tab.', 9000);
+      setSaveBadge('Autosave off (open in another tab)');
+      toast('This logbook is open in another tab too. Autosave is off here, so please work in one tab.', 9000);
     }
   };
 
@@ -1400,7 +1417,6 @@
       state.filename = a._docFilename || 'logbook.pdf';
       state.opCount = 0;
       state.lastHash = null;
-      state.savedHash = null;
       state.otherTab = false;
     }
     const doc = a.pdfDocument;
@@ -1429,11 +1445,10 @@
     const orig = a.download.bind(a);
     originals.download = async () => {
       await orig();
-      state.savedHash = state.lastHash;
       setSaveBadge('Editable copy downloaded', 'ok');
     };
     a.downloadOrSave = async () => {
-      toast('Your work is saved in this browser automatically. Use Export PDF to hand it in.', 5000);
+      toast('No need to save: your work saves itself in this browser. Use Export PDF to hand it in.', 5000);
     };
     // pdf.js bound its Ctrl+S handler before this override, so catch the key first.
     window.addEventListener('keydown', e => {
@@ -1452,7 +1467,7 @@
     a.initializedPromise.then(() => {
       wrapSave(a);
       buildBar();
-      a.eventBus.on('scalechanging', syncZoom);
+      a.eventBus.on('scalechanging', () => { syncZoom(); onZoom(); });
       a.eventBus.on('pagesloaded', () => { syncPage(); syncZoom(); });
       a.eventBus.on('annotationeditormodechanged', ({ mode }) => syncMode(mode));
       a.eventBus.on('documentloaded', () => onDocumentLoaded().catch(err => {
