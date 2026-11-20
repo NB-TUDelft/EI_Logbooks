@@ -48,7 +48,7 @@ It runs:
 - when a logbook changes in the course book: its "log book entries" workflow
   sends a `book-logbooks-changed` signal (once the book has its
   `LOGBOOKS_DISPATCH_TOKEN` secret);
-- every hour (only publishing when something changed);
+- every night (only publishing when something changed);
 - by hand: **Actions** → *build and publish* → **Run workflow**.
 
 A run fails, and publishes nothing, if a logbook in the book is misnamed, in

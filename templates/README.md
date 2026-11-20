@@ -61,15 +61,9 @@ To renumber or merge a logbook, first add it to
 
 ## Highlight
 
-[`highlight.txt`](highlight.txt): one line per change, `YYYY-MM-DD HH:MM id id ...`
-(Amsterdam time; no time means midnight). The latest line whose moment has
-passed wins. The site checks every hour, so you can plan ahead. `none`: no box.
-
-```
-3.1
-2026-11-24 18:00 1.1 1.2 2.1 2.2 3.1
-2026-11-27 18:00 4.1
-```
+[`highlight.txt`](highlight.txt) lists the logbooks in the box at the top of
+the start page, e.g. `3.1` or `1.1 1.2`. Change it by hand when needed; the site
+updates when you push. `none`: no box.
 
 ## Building blocks
 
