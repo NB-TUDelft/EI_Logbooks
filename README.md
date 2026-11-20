@@ -19,6 +19,7 @@ Everything runs in the student's own browser; nothing is uploaded.
 - [2.1 Whack a mole](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.1)
 - [2.2 Timed acquisitions](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.2)
 - [2.3 NEWEST Timed acquisitions](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.3)
+- [2.3 UPDATED Timed acquisitions](https://nb-tudelft.github.io/EI_Logbooks/?logbook=2.3)
 - [3.1 aliasing and anti aliasing](https://nb-tudelft.github.io/EI_Logbooks/?logbook=3.1)
 - [4.1 opamp basics](https://nb-tudelft.github.io/EI_Logbooks/?logbook=4.1)
 - [4.2 real opamps](https://nb-tudelft.github.io/EI_Logbooks/?logbook=4.2)
