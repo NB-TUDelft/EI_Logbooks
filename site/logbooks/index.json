@@ -21,20 +21,8 @@
     "id": "2.2",
     "title": "Timed acquisitions",
     "week": "week2",
-    "file": "2.2_Timed_acquisitions_logbook.pdf"
-  },
-  {
-    "id": "2.3",
-    "title": "NEWEST Timed acquisitions",
-    "week": "week2",
-    "file": "2.3_NEWEST_Timed_acquisitions_logbook.pdf",
+    "file": "2.2_Timed_acquisitions_logbook.pdf",
     "highlight": true
-  },
-  {
-    "id": "2.3",
-    "title": "UPDATED Timed acquisitions",
-    "week": "week2",
-    "file": "2.3_UPDATED_Timed_acquisitions_logbook.pdf"
   },
   {
     "id": "3.1",
