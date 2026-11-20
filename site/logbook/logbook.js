@@ -613,9 +613,12 @@
   const fitsAt = (font, text, multi, w, h, size, extraLines = 0) => multi
     ? (wrapLines(text, font, size, w - 2 * PAD).length + extraLines) * size * LEAD <= h - 2 * PAD
     : font.widthOfTextAtSize(text.replace(/\n/g, ' '), size) <= w - 2 * PAD;
-  // Largest size from `start` down to MIN_PT (0.5 pt steps) at which the text fits; null if none.
+  // Largest size from `start` down to MIN_PT (1 pt integer steps) at which the text fits; null if none.
   function fitSize(font, text, multi, w, h, start, extraLines = 0) {
-    for (let s = start; s >= MIN_PT - 1e-9; s -= 0.5) if (fitsAt(font, text, multi, w, h, s, extraLines)) return s;
+    if (fitsAt(font, text, multi, w, h, start, extraLines)) return start;
+    for (let s = Math.floor(start) - (Math.floor(start) === start ? 1 : 0); s >= MIN_PT; s -= 1) {
+      if (fitsAt(font, text, multi, w, h, s, extraLines)) return s;
+    }
     return null;
   }
   // Where a too-long answer is cut: after the last ".", "!", or "?" whose text still fits
@@ -1258,6 +1261,8 @@
             for (const p of ['font', 'letterSpacing', 'lineHeight', 'padding', 'textAlign', 'borderWidth', 'borderStyle', 'boxSizing'])
               mirror.style[p] = cs[p];
             mirror.style.borderColor = 'transparent';
+            mirror.style.right = 'auto';
+            mirror.style.width = el.clientWidth + 'px';
             mirror.replaceChildren(document.createTextNode(text.slice(0, m.cut)), $('mark', {}, text.slice(m.cut) || ' '));
             mirror.scrollTop = el.scrollTop;
           } else if (mirror) { mirror.remove(); mirror = null; }
