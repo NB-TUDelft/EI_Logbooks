@@ -76,6 +76,7 @@ updates when you push. `none`: no box.
 | `sketchbox("id", height: 150pt)` | image box for a photo, graph or sketch (see below) |
 | `closing(graph_prompt: [...], graph_height: 120pt)` | closing with a graph box; `graph: false` leaves it out |
 | `section("TITLE", note: "...")`, `prompt[...]`, `hint[...]` | headings and instructions |
+| `subsection([Sub-heading], note: [Tasks ...])` | a bold sub-heading inside a section; students can pick it as a sub-part for images and pages |
 
 ## Images
 

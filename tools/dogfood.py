@@ -294,6 +294,9 @@ def run_suite():
         res_blank = driver.execute_async_script("""
             const cb = arguments[0];
             window.nb2420Logbook.insertBlankPage().then(() => cb('ok')).catch(e => cb(String(e)));
+            // the Text page dialog asks which exercise; keep the one it suggests
+            const ok = () => { const b = document.getElementById('lbTextPageOk'); if (b) b.click(); else setTimeout(ok, 100); };
+            ok();
         """)
         assert res_blank == 'ok', f"insertBlankPage failed: {res_blank}"
         ok_page = check_export("with_added_page", None, "overflow")

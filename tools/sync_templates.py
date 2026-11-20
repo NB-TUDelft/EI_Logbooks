@@ -40,6 +40,7 @@ REPO = Path(__file__).resolve().parent.parent
 TEMPLATES = REPO / 'templates'
 BOOK_REPO = os.environ.get('BOOK_REPO', 'https://github.com/NB-TUDelft/Electronic_Instrumentation')
 BOOK_BRANCH = os.environ.get('BOOK_BRANCH', 'main')
+BOOK_REF = os.environ.get('BOOK_REF', '').strip()      # one exact book commit, when the book asks for it
 MANUALS = 'book/manuals'
 NAME = re.compile(r'(\d+)\.(\d+)_[^\s/]+_logbook\.typ')
 IMPORT = re.compile(r'#import\s+"\.\./logbook_common\.typ"')
@@ -50,11 +51,20 @@ HOW = 'name it <n.m>_<Title_with_underscores>_logbook.typ, e.g. 3.2_Active_filte
 
 
 def fetch(dest):
-    """Shallow, sparse clone of the book: only book/manuals. Returns its commit."""
+    """Shallow, sparse clone of the book: only book/manuals, at BOOK_REF if set
+    (the commit the book's own check passed), else the tip of BOOK_BRANCH.
+    Returns its commit."""
     run = lambda *a: subprocess.run(['git', *a], check=True, capture_output=True, text=True).stdout.strip()
-    run('clone', '--quiet', '--depth', '1', '--branch', BOOK_BRANCH, '--filter=blob:none',
-        '--sparse', BOOK_REPO, str(dest))
-    run('-C', str(dest), 'sparse-checkout', 'set', MANUALS)
+    if BOOK_REF:
+        run('init', '--quiet', str(dest))
+        run('-C', str(dest), 'remote', 'add', 'origin', BOOK_REPO)
+        run('-C', str(dest), 'sparse-checkout', 'set', MANUALS)
+        run('-C', str(dest), 'fetch', '--quiet', '--depth', '1', '--filter=blob:none', 'origin', BOOK_REF)
+        run('-C', str(dest), 'checkout', '--quiet', 'FETCH_HEAD')
+    else:
+        run('clone', '--quiet', '--depth', '1', '--branch', BOOK_BRANCH, '--filter=blob:none',
+            '--sparse', BOOK_REPO, str(dest))
+        run('-C', str(dest), 'sparse-checkout', 'set', MANUALS)
     return run('-C', str(dest), 'rev-parse', '--short', 'HEAD')
 
 
@@ -183,7 +193,11 @@ def main():
     else:
         with tempfile.TemporaryDirectory() as tmp:
             book = Path(tmp) / 'book'
-            commit = fetch(book)
+            try:
+                commit = fetch(book)
+            except subprocess.CalledProcessError as error:
+                sys.exit(f'Could not get the course book{" at " + BOOK_REF if BOOK_REF else ""} '
+                         f'(a commit must be the full 40-character id): {error.stderr.strip()}')
             changed = sync(book)
     for what, name in changed:
         print(f'{what}: {name}')
