@@ -119,6 +119,11 @@ body.lb-busy #lbSaveBadge::after { content: ""; display: inline-block; width: 10
 @media (max-width: 1200px) { .lb-tb-label { display: none; } .lb-export .lb-tb-label { display: inline; } .lb-status { display: none; } }
 /* never clip: if the bar still does not fit, it wraps (the page offset follows its height) */
 .lb-row { flex-wrap: wrap; }
+/* Set by the bar itself when it would otherwise wrap (see buildBar). */
+#lbBar.lb-c1 .lb-tool .lb-tb-label { display: none; }
+#lbBar.lb-c2 .lb-status { font-size: 0; }
+#lbBar.lb-c3 .lb-group .lb-tb-label { display: none; }
+#lbBar.lb-c4 .lb-name { display: none; }
 @media (max-width: 1080px) { .lb-name { display: none; } .lb-hide-sm { display: none !important; } }
 .lb-title, .lb-group, .lb-right { flex-shrink: 0; }
 .lb-page-count { white-space: nowrap; }

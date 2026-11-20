@@ -1235,6 +1235,21 @@
       document.documentElement.style.setProperty('--lb-bar-h', bar.offsetHeight + 'px');
     };
     new ResizeObserver(fit).observe(bar); fit();
+    // Rather than wrap to a second row, drop labels step by step until the bar
+    // fits: tool labels, the save text (its dot stays), page button labels, the
+    // logbook name. Every button keeps its tooltip. Phones may still wrap.
+    const row = bar.firstElementChild, steps = ['lb-c1', 'lb-c2', 'lb-c3', 'lb-c4'];
+    const wraps = () => { const kids = [...row.children].filter(k => k.offsetParent);
+      return kids.some(k => k.offsetTop > kids[0].offsetTop + 8); };
+    const compact = () => {
+      bar.classList.remove(...steps);
+      for (const s of steps) { if (!wraps()) break; bar.classList.add(s); }
+    };
+    let compactFrame = 0;
+    const recompact = () => { cancelAnimationFrame(compactFrame); compactFrame = requestAnimationFrame(compact); };
+    window.addEventListener('resize', recompact);
+    new MutationObserver(recompact).observe(row, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+    recompact();
     buildSidebar();
     document.addEventListener('click', e => {
       if (!ui.menu.contains(e.target) && !ui.pmenu.contains(e.target)) closeMenu();
