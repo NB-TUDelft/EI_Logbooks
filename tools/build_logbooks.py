@@ -43,27 +43,12 @@ def copy_bookmarks(src, pdf):
 
 
 def highlighted():
-    """Ids from templates/highlight.txt. Lines are "[YYYY-MM-DD [HH:MM]] id id ...";
-    the latest line whose moment has passed (Amsterdam time) wins. No time
-    means midnight. # starts a comment."""
-    import datetime
+    """Ids from templates/highlight.txt: every id on its lines, # starts a
+    comment, "none" or an empty file means no box. Change it by hand."""
     f = TEMPLATES / 'highlight.txt'
-    try:
-        from zoneinfo import ZoneInfo
-        now = datetime.datetime.now(ZoneInfo('Europe/Amsterdam'))
-    except Exception:
-        now = datetime.datetime.now()
-    now = now.strftime('%Y-%m-%d %H:%M')
-    best, ids = '', []
+    ids = []
     for line in (f.read_text(encoding='utf-8').splitlines() if f.exists() else []):
-        words = line.split('#')[0].split()
-        if not words:
-            continue
-        when = ''
-        if re.fullmatch(r'\d{4}-\d{2}-\d{2}', words[0]):
-            when = words.pop(0) + ' ' + (words.pop(0) if words and re.fullmatch(r'\d{1,2}:\d{2}', words[0]) else '00:00').zfill(5)
-        if when <= now and when >= best:
-            best, ids = when, [w for w in words if w.lower() != 'none']
+        ids += [w for w in line.split('#')[0].split() if w.lower() != 'none']
     return ids
 
 

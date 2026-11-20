@@ -1,8 +1,4 @@
 # Logbooks shown in the Highlight box at the top of the start page.
-# One line per change: "YYYY-MM-DD HH:MM id id ..." applies from that moment
-# (Amsterdam time; no time = midnight) until a later line takes over.
-# A line without a date always applies. The site checks every hour, so a
-# future line switches the box by itself. "none" = no box.
+# Write their ids (e.g. 3.1 or 1.1 1.2), and change this by hand when needed;
+# the site updates when you push. "none" or nothing = no box.
 3.1
-2026-11-24 18:00 1.1 1.2 2.1 2.2 3.1
-2026-11-27 18:00 4.1

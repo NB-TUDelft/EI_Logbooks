@@ -3,7 +3,7 @@
 #
 # The logbooks are written in the course book (NB-TUDelft/Electronic_Instrumentation,
 # book/manuals/weekN/). Every run first copies them into templates/
-# (tools/sync_templates.py). Runs come from pushes here, an hourly schedule,
+# (tools/sync_templates.py). Runs come from pushes here, a nightly schedule,
 # the Run workflow button, and the book itself: its workflow sends a
 # "book-logbooks-changed" repository_dispatch when a logbook there changes.
 # The PDFs are only rebuilt when something they depend on changed (the copied
@@ -19,7 +19,7 @@ on:
   repository_dispatch:     # the course book says its logbooks changed (event type book-logbooks-changed)
     types: [book-logbooks-changed]
   schedule:
-    - cron: '5 * * * *'    # hourly: picks up changes in the course book, and switches the Highlight box at the times in templates/highlight.txt
+    - cron: '15 0 * * *'   # nightly: picks up changes in the course book if its signal did not come
 permissions:
   contents: write      # commit the copied templates, built PDFs and README links
   pages: write
@@ -97,7 +97,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # An hourly run that changed nothing does not publish again.
+      # A nightly run that changed nothing does not publish again.
       - name: Leave the folder README off the website
         if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
         run: rm -f site/README.md
