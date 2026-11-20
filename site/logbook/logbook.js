@@ -218,13 +218,13 @@
     const bar = $('div', { class: 'lb-restore', role: 'alert' },
       $('div', { class: 'lb-restore-text' }, $('strong', {}, 'Continue where you left off?'),
         $('span', {}, `This browser has your work on this logbook from ${label}.`)),
-      $('button', { class: 'lb-btn lb-primary', onclick: async () => {
+      $('button', { id: 'lbRestoreYes', type: 'button', class: 'lb-btn lb-primary', onclick: async () => {
         done();
         if (state.doc !== doc) return;
         try { await reopen(rec.bytes); toast('Work restored.'); }
         catch (err) { toast('Could not restore: ' + err.message); }
       } }, 'Restore my work'),
-      $('button', { class: 'lb-btn', onclick: async () => {
+      $('button', { id: 'lbRestoreNo', type: 'button', class: 'lb-btn', onclick: async () => {
         if (!await askConfirm('Start fresh?',
           `Your saved work from ${label} will be deleted from this browser and cannot be recovered.`,
           'Start fresh')) return;
@@ -486,7 +486,7 @@
   async function deleteCurrentPage() {
     const n = app().pdfViewer.currentPageNumber;
     const info = state.pageInfo[n - 1];
-    if (!info || !info.added) { toast('Pages of the logbook itself cannot be deleted. Only pages you added can.'); return; }
+    if (!info || !info.added) return;
     if (!await askConfirm(`Delete page ${n}?`, 'This page and everything on it will be removed.', 'Delete page')) return;
     await transform(async pl => {
       // drop metadata of an image page's notes field on this page
@@ -539,8 +539,8 @@
       [{ text: 'Cancel', value: null }, { text: 'Choose image', primary: true, id: 'lbExerciseOk', value: () => select.value }]);
   }
 
-  const askConfirm = (title, text, ok) => modal(title, [$('p', { class: 'lb-modal-text' }, text)],
-    [{ text: 'Cancel', value: false }, { text: ok, primary: true, danger: true, id: 'lbConfirmOk', value: true }]);
+  const askConfirm = (title, text, ok, danger = true) => modal(title, [$('p', { class: 'lb-modal-text' }, text)],
+    [{ text: 'Cancel', value: false }, { text: ok, primary: true, danger, id: 'lbConfirmOk', value: true }]);
 
   // ------------------------------------------------------- flattened export
   // The hand-in PDF has no form fields or annotations left: every field value,
@@ -857,6 +857,9 @@
       label(t.page, t.key, '[[/NB2420:field]]', x2 - 20, y1 + 1);
     }
     pl.catalog.delete(N('AcroForm'));
+    pl.setKeywords(['nb2420-logbook']);
+    pl.setProducer('nb2420-logbook editor');
+    if (state.id) pl.getInfoDict().set(N(KEY.id), PDFHexString.fromText(state.id));
     pl.getInfoDict().set(N('LogbookExported'), PDFHexString.fromText(nowIso()));
     pl.getInfoDict().set(N('LogbookFields'), PDFHexString.fromText(JSON.stringify(exact)));
     return pl.save({ updateFieldAppearances: false });
@@ -870,7 +873,8 @@
   }
 
   async function exportPdf() {
-    if (!app()?.pdfDocument || state.busy) return;
+    if (!app()?.pdfDocument) return;
+    if (state.busy) { toast('Still preparing your PDF…', 3000); return; }
     state.busy = true;
     document.body.classList.add('lb-busy');
     setSaveBadge('Preparing your PDF…');
@@ -880,7 +884,7 @@
       downloadBytes(bytes, (state.id || 'logbook') + '.pdf');
       state.savedHash = state.lastHash;
       setSaveBadge('Exported ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'ok');
-      toast('Exported. Hand in this PDF on Brightspace.', 6000);
+      toast('Exported. Hand in this PDF on Brightspace. You can always come back here to change your work and export again.', 7000);
     } catch (err) {
       console.error('[logbook] export failed', err);
       setSaveBadge('Export failed', 'warn');
@@ -953,7 +957,7 @@
       btn('lbNext', 'Next page', 'next', () => a().pdfViewer.nextPage()));
     const zoom = $('div', { class: 'lb-group lb-hide-sm', role: 'group', 'aria-label': 'Zoom' },
       btn('lbZoomOut', 'Zoom out', 'minus', () => a().pdfViewer.decreaseScale()),
-      $('button', { type: 'button', class: 'lb-tb lb-zoom-btn', title: 'Fit to width', 'aria-label': 'Fit to width',
+      $('button', { id: 'lbZoomFit', type: 'button', class: 'lb-tb lb-zoom-btn', title: 'Fit to width', 'aria-label': 'Fit to width',
                     onclick: () => { a().pdfViewer.currentScaleValue = 'page-width'; } }, ui.zoom),
       btn('lbZoomIn', 'Zoom in', 'plus', () => a().pdfViewer.increaseScale()));
 
@@ -984,7 +988,11 @@
     const menuItem = (id, label, fn) => $('button', { id, type: 'button', class: 'lb-menu-item', role: 'menuitem',
       onclick: () => { closeMenu(); fn(); } }, label);
     ui.menu.append(
-      menuItem('lbMenuEditable', 'Download editable copy', () => originals.download?.()),
+      menuItem('lbMenuEditable', 'Download editable copy', async () => {
+        if (originals.download) return originals.download();
+        const bytes = await a()?.pdfDocument?.saveDocument?.();
+        if (bytes) downloadBytes(bytes, (state.id || 'logbook') + '_editable.pdf');
+      }),
       menuItem('lbMenuOpen', 'Open a saved copy…', () => a().eventBus.dispatch('openfile', { source: window })),
       menuItem('lbMenuPrint', 'Print', () => window.print()),
       $('div', { class: 'lb-menu-sep' }),
@@ -1028,7 +1036,7 @@
     const what = all ? 'all logbooks' : 'this logbook';
     if (!await askConfirm(`Delete saved work for ${what}?`,
       `This removes your progress for ${what} from this browser. Anything you have not exported as a PDF will be lost.`,
-      'Continue')) return;
+      'Continue', false)) return;
     if (!await askConfirm('Are you sure?',
       `Your progress for ${what} cannot be recovered afterwards. Close other tabs with a logbook first, or they will save it again.`,
       all ? 'Delete everything' : 'Delete my work')) return;
@@ -1051,6 +1059,7 @@
     }
     buildStyle(mode);
   }
+  const COLOR_NAMES = { '#1d1d1f': 'Black', '#1f5fd1': 'Blue', '#c8321e': 'Red', '#178a4c': 'Green' };
   function buildStyle(mode) {
     if (!ui.style) return;
     const st = STYLE[mode];
@@ -1065,15 +1074,18 @@
       buildStyle(mode);
     };
     for (const col of st.colors) {
-      const s = $('button', { type: 'button', class: 'lb-swatch' + (col === c.color ? ' lb-on' : ''), title: 'Colour', 'aria-label': 'Colour ' + col,
+      const cname = COLOR_NAMES[col] || col;
+      const s = $('button', { id: 'lbSwatch_' + cname.toLowerCase().replace(/[^a-z0-9]+/g, '_'), type: 'button',
+        class: 'lb-swatch' + (col === c.color ? ' lb-on' : ''), title: cname, 'aria-label': 'Colour ' + cname,
         onclick: () => { c.color = col; apply(); } });
       s.style.setProperty('--sw', col);
       ui.style.append(s);
     }
     if (st.sizes) {
       ui.style.append($('span', { class: 'lb-style-sep' }));
-      for (const [v, lab] of st.sizes) ui.style.append($('button', { type: 'button', class: 'lb-size' + (v === c.size ? ' lb-on' : ''),
-        title: 'Size ' + lab, onclick: () => { c.size = v; apply(); } }, lab));
+      for (const [v, lab] of st.sizes) ui.style.append($('button', { id: 'lbSize_' + lab, type: 'button',
+        class: 'lb-size' + (v === c.size ? ' lb-on' : ''), title: 'Size ' + lab, 'aria-label': 'Size ' + lab,
+        onclick: () => { c.size = v; apply(); } }, lab));
     }
   }
 
@@ -1125,8 +1137,8 @@
       // An empty slot covers its placeholder field: clicking anywhere in it picks an image.
       if (!filled) box.addEventListener('click', e => { if (e.target === box) insert(); });
       const bar = $('div', { class: 'lb-slot-bar' },
-        $('button', { class: 'lb-btn lb-primary', 'data-act': 'slot-insert', onclick: insert }, filled ? 'Replace image' : 'Insert image'));
-      if (filled) bar.append($('button', { class: 'lb-btn', 'data-act': 'slot-remove', onclick: () => placeInSlot(slot, null) }, 'Remove'));
+        $('button', { id: 'lbSlotInsert_' + slot.name, type: 'button', class: 'lb-btn lb-primary', 'data-act': 'slot-insert', onclick: insert }, filled ? 'Replace image' : 'Insert image'));
+      if (filled) bar.append($('button', { id: 'lbSlotRemove_' + slot.name, type: 'button', class: 'lb-btn', 'data-act': 'slot-remove', onclick: () => placeInSlot(slot, null) }, 'Remove'));
       box.append(bar);
       pv.div.append(box);
     }
