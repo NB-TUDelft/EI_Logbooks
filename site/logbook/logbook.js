@@ -837,7 +837,7 @@
   // Ask once, on export, what to do with every answer that does not fit its box.
   // Resolves to {name: 'all' | 'overflow' | 'shrink'} or null on cancel.
   function askOverflow(items) {
-    const picked = Object.fromEntries(items.map(it => [it.name, it.shrinkTo ? 'shrink' : 'overflow']));
+    const picked = Object.fromEntries(items.map(it => [it.name, 'overflow']));
     const table = $('div', { class: 'lb-overflow-table' },
       $('div', { class: 'lb-ov-head' },
         $('span', {}, 'Question'),
@@ -847,7 +847,7 @@
     for (const it of items) {
       const rowBtns = [];
       const optDefs = [
-        ['overflow', 'Move the rest', 'lb-ov-overflow', !!it.shrinkTo],
+        ['overflow', 'Move the rest', 'lb-ov-overflow', false],
         ['all', 'Move all', 'lb-ov-all', false],
         ['shrink', it.shrinkTo ? `Shrink (${it.shrinkTo} pt)` : 'Too long to shrink', 'lb-ov-shrink', !it.shrinkTo],
       ];
@@ -1022,11 +1022,11 @@
       if (!(t.ff & 4096) || !t.value.trim()) continue;
       const b = boxOf(t.rect), txt = clean(t.value), start = startSize(t.ff, daSize(t.da), b.h);
       if (fitsAt(font, txt, true, b.w, b.h, start)) continue;
-      // Same rule as the live view: text shrinks down to MIN_PT, and only what does
-      // not fit even then (the yellow part) is moved. Text that fits when shrunk has
-      // nothing to move: it is shrunk, or moved whole.
+      // Same rule as the live view: at the box's own size, the part that does not
+      // fit (the yellow part) moves. Shrinking is the student's choice, offered
+      // when the whole answer fits at MIN_PT or larger.
       const shrinkTo = fitSize(font, txt, true, b.w, b.h, start);
-      const cut = shrinkTo ? txt.length : splitPoint(font, txt, b.w, b.h, MIN_PT, 1);
+      const cut = splitPoint(font, txt, b.w, b.h, start, 1);
       Object.assign(t, { txt, cut });
       over.push({ name: t.name, label: t.label, page: t.pageNo, extra: txt.length - cut, shrinkTo, t });
     }
@@ -1037,7 +1037,6 @@
     for (const o of over) {
       let c = choice[o.name] || 'overflow';
       if (c === 'shrink' && !o.shrinkTo) c = 'overflow';
-      if (c === 'overflow' && o.shrinkTo) c = 'shrink';           // nothing to move: shrink, as the live view shows
       if (c === 'shrink') { o.t.opts = { size: o.shrinkTo }; exact.overflow[o.name] = { choice: c, size: o.shrinkTo }; continue; }
       const kept = c === 'all' ? '' : o.t.txt.slice(0, o.t.cut).trimEnd();
       const moved = c === 'all' ? o.t.txt : o.t.txt.slice(o.t.cut).trimStart();
@@ -1348,7 +1347,7 @@
   // Our own page overview: pdf.js's sidebar also merges and reorders files,
   // which a logbook must not do. Thumbnails render when they scroll into view
   // (with what is typed and drawn so far); click one to go to that page.
-  const SIDE_KEY = 'nb2420-sidebar', THUMB_W = 104;
+  const SIDE_KEY = 'nb2420-sidebar', THUMB_W = 128;
   const side = { el: null, list: null, observer: null, open: false, doc: null, gen: 0 };
   const sideWanted = () => {
     try { const v = localStorage.getItem(SIDE_KEY); if (v) return v === 'open'; } catch (_) {}
@@ -1503,13 +1502,13 @@
     return fieldsByPage[pageNumber];
   }
   // What fits, for one box and its current text.
+  // Measured at the box's own size: text is not shrunk while typing.
   function measure(f, font, text) {
-    const { w, h } = f.b, avail = w - 2 * PAD, avg = font.avg(MIN_PT);
+    const { w, h } = f.b, avail = w - 2 * PAD, size = f.start, avgS = font.avg(size);
     if (!f.multi) {
-      const used = font.widthOfTextAtSize(text.replace(/\n/g, ' '), MIN_PT);
-      return { left: Math.floor((avail - used) / avg) };
+      const used = font.widthOfTextAtSize(text.replace(/\n/g, ' '), size);
+      return { left: Math.floor((avail - used) / avgS) };
     }
-    const size = MIN_PT, avgS = font.avg(size);
     if (fitsAt(font, text, true, w, h, size)) {
       const lines = text ? wrapLines(text, font, size, avail) : [''];
       const room = Math.floor((h - 2 * PAD) / (size * LEAD));
@@ -1541,8 +1540,7 @@
         const update = () => {
           if (!el.isConnected) { liveUpdates.delete(update); return; }
           const text = el.value.replace(/\r\n?/g, '\n');
-          const livePt = fitSize(font, text, f.multi, f.b.w, f.b.h, f.start) || MIN_PT;
-          el.style.fontSize = scaled(livePt);
+          el.style.fontSize = scaled(f.start);            // always the box's own size; shrinking is an export choice
           const m = measure(f, font, text);
           if (!f.multi) {
             const own = +(el.dataset.lbOwnMax ??= String(el.maxLength > 0 ? el.maxLength : Infinity));
