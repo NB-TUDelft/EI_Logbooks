@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parent.parent
 TEMPLATES = REPO / 'templates'
 OUT = REPO / 'site' / 'logbooks'
 BASE_URL = os.environ.get('SITE_URL', 'https://nb-tudelft.github.io/EI_Logbooks/')
-NAME = re.compile(r'(\d+)\.(\d+)_(.+)_logbook')
+NAME = re.compile(r'(\d+)\.(\d+)_([^\s/]+)_logbook')
 
 
 def copy_bookmarks(src, pdf):
@@ -106,10 +106,15 @@ def main():
         for src in sorted(TEMPLATES.glob('*_logbook.typ')):
             m = NAME.fullmatch(src.stem)
             if not m:
-                print('skipped (name is not <n.m>_<Title>_logbook.typ):', src.name)
-                continue
+                if src.name.startswith('BACKUP '):      # the bare starter logbook, not on the site
+                    continue
+                sys.exit(f'templates/{src.name}: the name is not <n.m>_<Title>_logbook.typ. '
+                         'Logbooks are written in the course book; see templates/README.md.')
             lid, title = f'{m[1]}.{m[2]}', m[3].replace('_', ' ')
-            res = render(RenderRequest(source=src, root=TEMPLATES, preview='none', fillable=True), Path(cache))
+            try:
+                res = render(RenderRequest(source=src, root=TEMPLATES, preview='none', fillable=True), Path(cache))
+            except Exception as error:
+                sys.exit(f'templates/{src.name} does not build: {error}')
             dest = OUT / f'{src.stem}.pdf'
             shutil.copyfile(res.pdf, dest)
             copy_bookmarks(src, dest)

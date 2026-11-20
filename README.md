@@ -51,4 +51,8 @@ It runs:
 - every hour (only publishing when something changed);
 - by hand: **Actions** → *build and publish* → **Run workflow**.
 
+A run fails, and publishes nothing, if a logbook in the book is misnamed, in
+the wrong week folder, doubled, imports something the site lacks or does not
+build, or if a logbook was edited here by hand. Its summary page says what to fix.
+
 "No artifacts named github-pages"? That is GitHub: press **Re-run jobs**.

@@ -36,9 +36,26 @@ jobs:
       - id: pages                 # gives the site's real address (base_url)
         uses: actions/configure-pages@v5
 
+      # Fails, and publishes nothing, when a logbook in the book is misnamed,
+      # in the wrong week folder, doubled, or imports something we lack.
       - name: Copy the templates from the course book
         id: sync
         run: python3 tools/sync_templates.py
+
+      # A logbook edited or uploaded into templates/ here would be overwritten
+      # by the copy above, so say where to make the change instead.
+      - name: Logbooks are written in the course book
+        if: github.event_name == 'push'
+        run: |
+          before="${{ github.event.before }}"
+          git cat-file -e "$before^{commit}" 2>/dev/null || exit 0
+          hand=$(git diff --name-only "$before" HEAD -- 'templates/*_logbook.typ' |
+                 while read -r f; do [ -n "$(git status --porcelain -- "$f")" ] && echo "$f"; done || true)
+          [ -z "$hand" ] && exit 0
+          msg="Changed here by hand, but logbooks are written in the course book (NB-TUDelft/Electronic_Instrumentation, book/manuals/weekN/). Make the change there; the copy here is overwritten."
+          echo "$hand" | while read -r f; do echo "::error file=$f,title=Logbook edited here::$msg"; done
+          { echo "### Logbook edited here"; echo; echo "$msg"; echo; echo "$hand" | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Did the templates change?
         id: changed
