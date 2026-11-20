@@ -57,9 +57,15 @@ To renumber or merge a logbook, first add it to
 
 ## Highlight
 
-[`highlight.txt`](highlight.txt): one line per change, `YYYY-MM-DD id id ...`.
-The latest line whose date has passed wins, checked every night, so you can
-plan ahead. `none`: no box.
+[`highlight.txt`](highlight.txt): one line per change, `YYYY-MM-DD HH:MM id id ...`
+(Amsterdam time; no time means midnight). The latest line whose moment has
+passed wins. The site checks every hour, so you can plan ahead. `none`: no box.
+
+```
+3.1
+2026-11-24 18:00 1.1 1.2 2.1 2.2 3.1
+2026-11-27 18:00 4.1
+```
 
 ## Building blocks
 
@@ -69,13 +75,27 @@ plan ahead. `none`: no box.
 | `area("id", height: 60pt)` | multi-line answer box |
 | `check("id")` | checkbox |
 | `field_row([Label:], line_field("a"), ...)` | label and box pairs |
-| `image_slot("id", height: 150pt)` | image box for a photo, graph or sketch |
-| `closing(graph: false)` | closing without the graph box |
+| `sketchbox("id", height: 150pt)` | image box for a photo, graph or sketch (see below) |
+| `closing(graph_prompt: [...], graph_height: 120pt)` | closing with a graph box; `graph: false` leaves it out |
 | `section("TITLE", note: "...")`, `prompt[...]`, `hint[...]` | headings and instructions |
+
+## Images
+
+Any plot, photo, screenshot or sketch gets an image box, never an `area`.
+Students insert a picture or draw in it on the site; the layout never shifts.
+
+- In the book, write `sketchbox("id", height: 150pt)`. The book's own
+  `logbook_common.typ` draws it as a blank area with a "Photo or file
+  reference" line; ours turns it into an image box. (`image_slot` only exists
+  in ours, so the book build would fail on it.)
+- Put a `prompt[...]` above it saying what goes in, with axes and units.
+- Place it in the `section` of its task. The site tags each image with the
+  last section that starts on or before its page.
+- 150 to 200 pt high suits a graph. For one graph at the end, use the
+  closing graph box instead.
 
 ## Tips
 
-- Pictures go in `image_slot`, not `area`; 150 to 200 pt suits a graph.
 - Field ids are lowercase and unique; they become the columns in the
   submissions table. Keep them between years to compare years.
 - Don't start ids with `img_`, and keep `name`, `partner`, `date`, `group`.

@@ -3,7 +3,7 @@
 #
 # The logbooks are written in the course book (NB-TUDelft/Electronic_Instrumentation,
 # book/manuals/weekN/). Every run first copies them into templates/
-# (tools/sync_templates.py). Runs come from pushes here, the nightly schedule,
+# (tools/sync_templates.py). Runs come from pushes here, an hourly schedule,
 # the Run workflow button, and the book itself: its workflow sends a
 # "book-logbooks-changed" repository_dispatch when a logbook there changes.
 # The PDFs are only rebuilt when something they depend on changed (the copied
@@ -19,7 +19,7 @@ on:
   repository_dispatch:     # the course book says its logbooks changed (event type book-logbooks-changed)
     types: [book-logbooks-changed]
   schedule:
-    - cron: '15 0 * * *'   # nightly: picks up changes in the course book, and switches the Highlight box on the dates in templates/highlight.txt
+    - cron: '5 * * * *'    # hourly: picks up changes in the course book, and switches the Highlight box at the times in templates/highlight.txt
 permissions:
   contents: write      # commit the copied templates, built PDFs and README links
   pages: write
@@ -69,6 +69,7 @@ jobs:
         run: python3 tools/build_logbooks.py --links-only
         env: { SITE_URL: "${{ steps.pages.outputs.base_url }}/" }
       - name: Commit the templates, build and README
+        id: commit
         run: |
           git add -A templates site/logbooks README.md
           if ! git diff --cached --quiet; then
@@ -76,13 +77,18 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "Build logbook PDFs / update README links" -m "Templates from the course book at ${{ steps.sync.outputs.commit }}."
             git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # An hourly run that changed nothing does not publish again.
       - name: Leave the folder README off the website
+        if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
         run: rm -f site/README.md
-      - uses: actions/upload-pages-artifact@v3
+      - if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
         with: { path: site }
       - id: deploy
+        if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
         uses: actions/deploy-pages@v4
         continue-on-error: true   # GitHub sometimes cannot find the artifact yet
       - if: steps.deploy.outcome == 'failure'

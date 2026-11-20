@@ -48,7 +48,7 @@ It runs:
 - when a logbook changes in the course book: its workflow sends a
   `book-logbooks-changed` signal (not added to the book yet; needs its
   `LOGBOOKS_DISPATCH_TOKEN` secret);
-- every night;
+- every hour (only publishing when something changed);
 - by hand: **Actions** → *build and publish* → **Run workflow**.
 
 "No artifacts named github-pages"? That is GitHub: press **Re-run jobs**.

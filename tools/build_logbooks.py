@@ -43,23 +43,27 @@ def copy_bookmarks(src, pdf):
 
 
 def highlighted():
-    """Ids from templates/highlight.txt. Lines are "[YYYY-MM-DD] id id ...";
-    the latest line whose date has passed (Amsterdam time) wins. # = comment."""
+    """Ids from templates/highlight.txt. Lines are "[YYYY-MM-DD [HH:MM]] id id ...";
+    the latest line whose moment has passed (Amsterdam time) wins. No time
+    means midnight. # starts a comment."""
     import datetime
     f = TEMPLATES / 'highlight.txt'
     try:
         from zoneinfo import ZoneInfo
-        today = datetime.datetime.now(ZoneInfo('Europe/Amsterdam')).date().isoformat()
+        now = datetime.datetime.now(ZoneInfo('Europe/Amsterdam'))
     except Exception:
-        today = datetime.date.today().isoformat()
+        now = datetime.datetime.now()
+    now = now.strftime('%Y-%m-%d %H:%M')
     best, ids = '', []
     for line in (f.read_text(encoding='utf-8').splitlines() if f.exists() else []):
         words = line.split('#')[0].split()
         if not words:
             continue
-        date = words.pop(0) if re.fullmatch(r'\d{4}-\d{2}-\d{2}', words[0]) else ''
-        if date <= today and date >= best:
-            best, ids = date, [w for w in words if w.lower() != 'none']
+        when = ''
+        if re.fullmatch(r'\d{4}-\d{2}-\d{2}', words[0]):
+            when = words.pop(0) + ' ' + (words.pop(0) if words and re.fullmatch(r'\d{1,2}:\d{2}', words[0]) else '00:00').zfill(5)
+        if when <= now and when >= best:
+            best, ids = when, [w for w in words if w.lower() != 'none']
     return ids
 
 
