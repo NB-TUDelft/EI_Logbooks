@@ -69,7 +69,7 @@ body.lb-custom { background: var(--lb-canvas); }
   outline: 2px solid var(--lb-accent); outline-offset: 1px;
 }
 .lb-tb:disabled { opacity: .4; cursor: default; }
-.lb-tool.lb-on { background: #fff; color: var(--lb-accent-ink); box-shadow: 0 1px 2px rgba(16, 24, 40, .12), 0 0 0 1px rgba(0, 166, 214, .25); }
+.lb-tool.lb-on, .lb-side-btn.lb-on { background: #fff; color: var(--lb-accent-ink); box-shadow: 0 1px 2px rgba(16, 24, 40, .12), 0 0 0 1px rgba(0, 166, 214, .25); }
 .lb-zoom-btn { min-width: 52px; font-variant-numeric: tabular-nums; color: var(--lb-muted); }
 .lb-danger-ghost { color: var(--lb-danger); }
 .lb-danger-ghost:hover { background: #fdecea; }
@@ -119,6 +119,11 @@ body.lb-busy #lbSaveBadge::after { content: ""; display: inline-block; width: 10
 @media (max-width: 1200px) { .lb-tb-label { display: none; } .lb-export .lb-tb-label { display: inline; } .lb-status { display: none; } }
 /* never clip: if the bar still does not fit, it wraps (the page offset follows its height) */
 .lb-row { flex-wrap: wrap; }
+/* Set by the bar itself when it would otherwise wrap (see buildBar). */
+#lbBar.lb-c1 .lb-tool .lb-tb-label { display: none; }
+#lbBar.lb-c2 .lb-status { font-size: 0; }
+#lbBar.lb-c3 .lb-group .lb-tb-label { display: none; }
+#lbBar.lb-c4 .lb-name { display: none; }
 @media (max-width: 1080px) { .lb-name { display: none; } .lb-hide-sm { display: none !important; } }
 .lb-title, .lb-group, .lb-right { flex-shrink: 0; }
 .lb-page-count { white-space: nowrap; }
@@ -179,6 +184,15 @@ body.lb-custom .annotationLayer :is(.textWidgetAnnotation, .choiceWidgetAnnotati
 .lb-modal h2 { margin: 0 0 8px; font-size: 17px; font-weight: 650; }
 .lb-modal-text { margin: 0 0 14px; color: var(--lb-muted); }
 .lb-field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 13px; }
+.lb-field + .lb-field { margin-top: 14px; }
+/* Image page layout picker: hover to preview, click to choose (like Word's table grid). */
+.lb-grid-wrap { display: flex; align-items: flex-end; gap: 14px; }
+.lb-grid { display: grid; grid-template-columns: repeat(3, 26px); grid-auto-rows: 20px; gap: 3px; }
+.lb-grid-cell { all: unset; box-sizing: border-box; cursor: pointer; border: 1px solid var(--lb-line); border-radius: 3px; background: #fff; }
+.lb-grid-cell.lb-on { background: #d9f0f8; border-color: var(--lb-accent); }
+.lb-grid-cell.lb-chosen { box-shadow: inset 0 0 0 2px var(--lb-accent); }
+.lb-grid-cell:focus-visible { outline: 2px solid var(--lb-accent); outline-offset: 1px; }
+.lb-grid-label { font-weight: 500; color: var(--lb-muted); font-variant-numeric: tabular-nums; }
 .lb-select { appearance: none; -webkit-appearance: none; font: 500 14px var(--lb-font); color: var(--lb-ink); padding: 9px 36px 9px 12px; border-radius: 9px;
   border: 0; box-shadow: inset 0 0 0 1px #cfd4dc; max-width: 100%;
   background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M6 8l4 4 4-4' fill='none' stroke='%235f6672' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center / 18px; }
@@ -213,4 +227,25 @@ body.lb-custom .annotationLayer :is(.textWidgetAnnotation, .choiceWidgetAnnotati
 .lb-mirror { position: absolute; inset: 0; overflow: hidden; pointer-events: none; color: transparent; white-space: pre-wrap; overflow-wrap: break-word; }
 .lb-mirror mark { background: rgba(255, 214, 0, .6); color: transparent; border-radius: 2px; }
 
-@media print { #lbBar, .lb-slot, .lb-restore, .lb-toast, .lb-hint, .lb-mirror { display: none !important; } }
+/* pdf.js pops up an inserted image's label ("Image for: ...") on hover; the
+   label stays in the PDF, the popup is just noise on screen. */
+body.lb-custom .annotationLayer .popupAnnotation { display: none !important; }
+
+/* ------------------------------------------------------------ page sidebar */
+:root { --lb-side-w: 150px; }
+#lbSide { position: fixed; top: var(--lb-bar-h, 56px); bottom: 0; left: 0; width: var(--lb-side-w); z-index: 8500;
+  background: #fff; border-right: 1px solid var(--lb-line); overflow-y: auto; padding: 14px 0 24px;
+  transform: translateX(-100%); visibility: hidden; transition: transform .15s ease, visibility .15s; }
+body.lb-side-open #lbSide { transform: none; visibility: visible; }
+@media (min-width: 700px) { body.lb-custom.lb-side-open #viewerContainer { inset-inline-start: var(--lb-side-w) !important; } }
+@media (max-width: 699px) { #lbSide { box-shadow: 0 12px 32px rgba(16, 24, 40, .2); } }
+.lb-side-list { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.lb-thumb { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.lb-thumb-canvas { width: 104px; height: auto; background: #fff; border-radius: 2px; box-shadow: 0 0 0 1px var(--lb-line), 0 1px 3px rgba(16, 24, 40, .08); }
+.lb-thumb:hover .lb-thumb-canvas { box-shadow: 0 0 0 1px #c5cbd3, 0 2px 6px rgba(16, 24, 40, .12); }
+.lb-thumb.lb-current .lb-thumb-canvas { box-shadow: 0 0 0 2px var(--lb-accent); }
+.lb-thumb:focus-visible .lb-thumb-canvas { outline: 2px solid var(--lb-accent); outline-offset: 3px; }
+.lb-thumb-num { font: 500 12px/1 var(--lb-font); color: var(--lb-muted); font-variant-numeric: tabular-nums; }
+.lb-thumb.lb-current .lb-thumb-num { color: var(--lb-accent-ink); font-weight: 650; }
+
+@media print { #lbSide, #lbBar, .lb-slot, .lb-restore, .lb-toast, .lb-hint, .lb-mirror { display: none !important; } }

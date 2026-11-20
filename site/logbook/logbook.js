@@ -28,7 +28,7 @@
   const AUTOSAVE_MS = 3000;
   const KEY = {
     id: 'LogbookId', slots: 'LogbookSlots', images: 'LogbookImages',
-    added: 'LogbookAdded', kind: 'LogbookPageKind', exercise: 'LogbookExercise',
+    added: 'LogbookAdded', kind: 'LogbookPageKind', exercise: 'LogbookExercise', pageId: 'LogbookPageId',
   };
 
   // ---------------------------------------------------------------- options
@@ -78,10 +78,10 @@
     setTimeout(() => t.remove(), ms);
   };
 
-  function pickFile(accept = 'image/*') {
+  function pickFile(accept = 'image/*', multiple = false) {
     return new Promise(resolve => {
-      const input = $('input', { type: 'file', accept, class: 'lb-hidden-input' });
-      input.addEventListener('change', () => { resolve(input.files[0] || null); input.remove(); });
+      const input = $('input', { type: 'file', accept, class: 'lb-hidden-input', ...(multiple ? { multiple: '' } : {}) });
+      input.addEventListener('change', () => { resolve(multiple ? [...input.files] : input.files[0] || null); input.remove(); });
       input.addEventListener('cancel', () => { resolve(null); input.remove(); });
       document.body.append(input);
       input.click();
@@ -89,18 +89,51 @@
   }
   // Exposed so automated tests can feed a file without an OS dialog.
   let testFileHook = null;
-  const getImageFile = () => testFileHook ? Promise.resolve(testFileHook()) : pickFile();
+  const IMAGE_TYPES = 'image/*,application/pdf,.pdf';
+  const getImageFile = () => testFileHook ? Promise.resolve(testFileHook(false)) : pickFile(IMAGE_TYPES);
+  const getImageFiles = () => testFileHook ? Promise.resolve(testFileHook(true)) : pickFile(IMAGE_TYPES, true);
 
-  // Any image the browser can decode becomes a JPEG (handles PNG, WebP, HEIC
-  // where supported, EXIF rotation), at most 2400 px on the long side.
+  // A picture from the file: a bitmap for anything the browser decodes (JPEG,
+  // PNG, GIF, WebP, AVIF, BMP; HEIC in Safari), an <img> for SVG, and page 1
+  // rendered by pdf.js for a PDF (a plot exported as PDF, say).
+  async function decodeImage(file) {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      const task = globalThis.pdfjsLib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+      try {
+        const doc = await task.promise;
+        const page = await doc.getPage(1);
+        const base = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: Math.min(6, 2400 / Math.max(base.width, base.height)) });
+        const c = $('canvas', { width: Math.round(vp.width), height: Math.round(vp.height) });
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+        await page.render({ canvas: c, canvasContext: ctx, viewport: vp }).promise;
+        return c;
+      } finally { task.destroy(); }
+    }
+    try { return await createImageBitmap(file); } catch (err) {
+      const url = URL.createObjectURL(file);
+      try {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        if (!img.naturalWidth || !img.naturalHeight) throw err;
+        return img;
+      } catch (_) { throw err; } finally { setTimeout(() => URL.revokeObjectURL(url), 0); }
+    }
+  }
+
+  // Any picture becomes a JPEG (with EXIF rotation applied), at most 2400 px
+  // on the long side.
   async function imageRecord(file) {
-    const bmp = await createImageBitmap(file);
+    const src = await decodeImage(file);
+    const bmp = { width: src.naturalWidth || src.width, height: src.naturalHeight || src.height };
     const scale = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
     const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
     const canvas = $('canvas', { width: w, height: h });
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
-    ctx.drawImage(bmp, 0, 0, w, h);
+    ctx.drawImage(src, 0, 0, w, h);
     const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
     // Hashes of the file as the student picked it, before resizing and JPEG
     // re-encoding, so the same photo gives the same hash in every logbook.
@@ -346,6 +379,9 @@
     }
     return -1;
   };
+  // A template box is found by its template page; a box on an added page by that page's id.
+  const slotPageIndex = slot => slot.pageId
+    ? state.pageInfo.findIndex(p => p.id === slot.pageId) : templateIndexOf(slot.ordinal);
 
   async function analyse() {
     const a = app(), doc = a.pdfDocument;
@@ -360,7 +396,9 @@
       const added = p.node.lookup(PDFName.of(KEY.added)) === PDFBool.True;
       const kind = p.node.lookup(PDFName.of(KEY.kind));
       const ex = p.node.lookup(PDFName.of(KEY.exercise));
-      return { added, kind: kind && kind.decodeText ? kind.decodeText() : null, exercise: ex && ex.decodeText ? ex.decodeText() : null };
+      const pid = p.node.lookup(PDFName.of(KEY.pageId));
+      const text = v => v && v.decodeText ? v.decodeText() : null;
+      return { added, kind: text(kind), exercise: text(ex), id: text(pid) };
     });
     state.id = infoStr(KEY.id) || (a._docFilename || 'logbook.pdf').replace(/\.pdf$/i, '').replace(/[_ ]edited$/i, '');
     state.saveKey = logbookId(state.id);
@@ -386,6 +424,7 @@
       }
     }
     for (const s of state.slots) {
+      if (s.pageId) continue;               // a box on an added page keeps the exercise it was made for
       const page = templateIndexOf(s.ordinal);
       // section that starts above the slot's top edge on its page, or earlier
       const slotTop = Math.max(s.rect[1], s.rect[3]);
@@ -433,7 +472,7 @@
       pl.setKeywords(['nb2420-logbook']);
       pl.getInfoDict().set(PDFName.of(KEY.id), PDFHexString.fromText(state.id));
       pl.getInfoDict().set(PDFName.of(KEY.slots), PDFHexString.fromText(JSON.stringify(
-        state.slots.map(({ name, ordinal, rect, exercise }) => ({ name, ordinal, rect, exercise })))));
+        state.slots.map(({ name, ordinal, pageId, rect, exercise }) => ({ name, ordinal, pageId, rect, exercise })))));
       pl.getInfoDict().set(PDFName.of(KEY.images), PDFHexString.fromText(JSON.stringify(state.images)));
       // pdf.js already wrote the field appearances (with fonts that cover Ω, µ, ...);
       // pdf-lib regenerating them with WinAnsi Helvetica would fail on those characters.
@@ -470,12 +509,18 @@
   // The slot image is a Stamp annotation (not page content), so Replace and
   // Remove can take it out again cleanly.
   async function placeInSlot(slot, rec) {
-    const pageIndex = templateIndexOf(slot.ordinal);
+    const pageIndex = slotPageIndex(slot);
     await transform(async pl => {
       const page = pl.getPage(pageIndex);
       removeAnnotsByNM(page, slotNM(slot.name));
       try { const f = pl.getForm().getField('img_' + slot.name); pl.getForm().removeField(f); } catch (_) {}
       if (!rec) { delete state.images['slot:' + slot.name]; return; }
+      await stampImage(pl, page, slot, rec, pageIndex);
+    }, pageIndex + 1);
+  }
+
+  // Put an image into a box as a Stamp annotation, centred and scaled to fit.
+  async function stampImage(pl, page, slot, rec, pageIndex) {
       const [x1, y1, x2, y2] = slot.rect;
       const inset = 2;
       const fit = contain(rec.w, rec.h, (x2 - x1) - 2 * inset, (y2 - y1) - 2 * inset);
@@ -494,11 +539,11 @@
       }));
       page.node.addAnnot(annot);
       state.images['slot:' + slot.name] = { ...rec.meta, kind: 'slot', slot: slot.name, exercise: slot.exercise, page: pageIndex + 1 };
-    }, pageIndex + 1);
   }
 
-  function markAdded(page, kind, exercise) {
+  function markAdded(page, kind, exercise, pageId) {
     page.node.set(PDFName.of(KEY.added), PDFBool.True);
+    if (pageId) page.node.set(PDFName.of(KEY.pageId), PDFHexString.fromText(pageId));
     page.node.set(PDFName.of(KEY.kind), PDFHexString.fromText(kind));
     if (exercise) page.node.set(PDFName.of(KEY.exercise), PDFHexString.fromText(exercise));
   }
@@ -531,37 +576,55 @@
     }, at + 1);
   }
 
+  // An image page holds a grid of image boxes (1 x 1 up to 3 across, 6 down)
+  // and a notes box. The chosen images fill the boxes left to right, top to
+  // bottom; each box can be filled, replaced or emptied later like any other.
+  const GRID_MAX = { cols: 3, rows: 6 };
   async function insertImagePage() {
     const at = app().pagesCount;
-    const exercise = await askExercise(exerciseForPage(app().pdfViewer.currentPageNumber - 1));
-    if (!exercise) return;
-    const file = await getImageFile();
-    if (!file) return;
-    let rec;
-    try { rec = await imageRecord(file); } catch (err) { toast('Could not read that image (' + err.message + '). Try a JPEG or PNG.'); return; }
+    const choice = await askImagePage(exerciseForPage(app().pdfViewer.currentPageNumber - 1));
+    if (!choice) return;
+    const { exercise, cols, rows } = choice;
+    const files = await getImageFiles();
+    if (!files || !files.length) return;
+    const recs = [];
+    for (const file of files.slice(0, cols * rows)) {
+      try { recs.push(await imageRecord(file)); }
+      catch (err) { toast(`Could not read ${file.name} (${err.message}). Try a JPEG or PNG.`); }
+    }
+    if (!recs.length) return;
+    if (files.length > cols * rows) toast(`Only the first ${cols * rows} images fit on this page.`);
     await transform(async pl => {
       const { width: W, height: H } = pl.getPage(0).getSize();
       const page = pl.insertPage(at, [W, H]);
       const bold = await pl.embedFont(StandardFonts.HelveticaBold);
       const regular = await pl.embedFont(StandardFonts.Helvetica);
-      const M = 40, notesH = 120;
+      const M = 40, notesH = rows > 3 ? 90 : 120, gap = 8;
       const head = ansi('Image for: ' + exercise);
       const headLines = wrapLines(head, bold, 12, W - 2 * M);
       headLines.forEach((ln, i) => ln && page.drawText(ln, { x: M, y: H - M - 12 - i * 15, size: 12, font: bold }));
       const subY = H - M - 12 - headLines.length * 15 - 2;
-      page.drawText(ansi('Added page  |  file: ' + rec.meta.original_filename), { x: M, y: subY, size: 8, font: regular, color: rgb(0.45, 0.45, 0.45) });
+      page.drawText('Added page', { x: M, y: subY, size: 8, font: regular, color: rgb(0.45, 0.45, 0.45) });
+      const pageId = 'p' + Date.now().toString(36);
       const top = subY - 12, bottom = M + notesH + 24;
-      const fit = contain(rec.w, rec.h, W - 2 * M, top - bottom);
-      const img = await pl.embedJpg(rec.bytes);
-      page.drawImage(img, { x: (W - fit.w) / 2, y: bottom + (top - bottom - fit.h) / 2, width: fit.w, height: fit.h });
+      const cw = (W - 2 * M - (cols - 1) * gap) / cols, ch = (top - bottom - (rows - 1) * gap) / rows;
+      const cells = [];
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const x = M + c * (cw + gap), y = top - (r + 1) * ch - r * gap;
+        // the same box as an image box in the templates (logbook_common.typ image_slot)
+        page.drawRectangle({ x, y, width: cw, height: ch, borderWidth: 0.5, borderColor: rgb(0.667, 0.667, 0.667), color: rgb(247 / 255, 249 / 255, 251 / 255) });
+        const slot = { name: `${pageId}_r${r + 1}c${c + 1}`, pageId, rect: [x, y, x + cw, y + ch], exercise };
+        state.slots.push(slot);
+        cells.push(slot);
+      }
       page.drawText('Notes:', { x: M, y: M + notesH + 6, size: 9, font: bold });
       const id = 'added_notes_' + Date.now().toString(36);
       const notes = pl.getForm().createTextField(id);
       notes.enableMultiline();
       notes.addToPage(page, { x: M, y: M, width: W - 2 * M, height: notesH, font: regular, borderWidth: 0.5, borderColor: rgb(0.6, 0.6, 0.6), backgroundColor: rgb(0.97, 0.98, 0.98) });
       notes.setFontSize(9);
-      markAdded(page, 'image', exercise);
-      state.images['page:' + id] = { ...rec.meta, kind: 'page', exercise, notes_field: id };
+      markAdded(page, 'image', exercise, pageId);
+      for (let i = 0; i < recs.length; i++) await stampImage(pl, page, cells[i], recs[i], at);
     }, at + 1);
   }
 
@@ -581,6 +644,10 @@
         }
       }
       for (const id of widgetIds) delete state.images['page:' + id];
+      if (info.id) {                        // image boxes on this page, and their images
+        for (const s of state.slots.filter(s => s.pageId === info.id)) delete state.images['slot:' + s.name];
+        state.slots = state.slots.filter(s => s.pageId !== info.id);
+      }
       pl.removePage(n - 1);
     }, Math.max(1, n - 1));
   }
@@ -611,14 +678,39 @@
     });
   }
 
-  function askExercise(preselect) {
+  // Exercise and layout for a new image page. The layout picker works like
+  // Word's insert-table grid: hover to preview, click to choose.
+  function askImagePage(preselect) {
     const choices = [...new Set([...state.exercises.map(e => e.title), GENERAL])];
     const select = $('select', { class: 'lb-select', 'aria-label': 'Exercise' },
       ...choices.map(c => { const o = $('option', {}, c); if (c === preselect) o.selected = true; return o; }));
+    let pick = { cols: 1, rows: 1 };
+    const label = $('span', { class: 'lb-grid-label', 'aria-live': 'polite' });
+    const grid = $('div', { class: 'lb-grid', role: 'grid', 'aria-label': 'Images on the page' });
+    const show = (cols, rows) => {
+      for (const cell of grid.children) {
+        cell.classList.toggle('lb-on', +cell.dataset.c <= cols && +cell.dataset.r <= rows);
+        cell.classList.toggle('lb-chosen', +cell.dataset.c === pick.cols && +cell.dataset.r === pick.rows);
+      }
+      const n = cols * rows;
+      label.textContent = `${cols} × ${rows}: ${n} image${n > 1 ? 's' : ''}`;
+    };
+    for (let r = 1; r <= GRID_MAX.rows; r++) for (let c = 1; c <= GRID_MAX.cols; c++) {
+      const cell = $('button', { type: 'button', class: 'lb-grid-cell', id: `lbGrid_${c}x${r}`, 'data-c': c, 'data-r': r,
+        'aria-label': `${c} across, ${r} down`,
+        onclick: () => { pick = { cols: c, rows: r }; show(c, r); } });
+      cell.addEventListener('mouseenter', () => show(c, r));
+      cell.addEventListener('focus', () => show(c, r));
+      grid.append(cell);
+    }
+    grid.addEventListener('mouseleave', () => show(pick.cols, pick.rows));
+    show(1, 1);
     return modal('Add image page', [
-      $('p', { class: 'lb-modal-text' }, 'The image goes on a new page at the end, with a box for notes.'),
-      $('label', { class: 'lb-field' }, $('span', {}, 'Which exercise is it for?'), select)],
-      [{ text: 'Cancel', value: null }, { text: 'Choose image', primary: true, id: 'lbExerciseOk', value: () => select.value }]);
+      $('p', { class: 'lb-modal-text' }, 'The images go on a new page at the end, with a box for notes. Choose several images at once to fill the grid.'),
+      $('label', { class: 'lb-field' }, $('span', {}, 'Which exercise is it for?'), select),
+      $('div', { class: 'lb-field' }, $('span', {}, 'How many images on the page?'), $('div', { class: 'lb-grid-wrap' }, grid, label))],
+      [{ text: 'Cancel', value: null },
+       { text: 'Choose images', primary: true, id: 'lbExerciseOk', value: () => ({ exercise: select.value, ...pick }) }]);
   }
 
   const askConfirm = (title, text, ok, danger = true) => modal(title, [$('p', { class: 'lb-modal-text' }, text)],
@@ -1039,6 +1131,7 @@
     trash: `<path ${S} d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>`,
     export: `<path ${S} d="M10 3.5v9M6.3 8.8 10 12.5l3.7-3.7M4 15v1.5h12V15"/>`,
     shield: `<path ${S} d="M10 2.8l5.8 2.2v4.6c0 3.6-2.5 6.3-5.8 7.6-3.3-1.3-5.8-4-5.8-7.6V5z"/><path ${S} d="M7.6 10l1.7 1.7 3.2-3.4"/>`,
+    pages: `<rect ${S} x="3" y="3.5" width="14" height="13" rx="1.5"/><path ${S} d="M7.5 3.5v13"/>`,
     more: '<circle cx="5" cy="10" r="1.4" fill="currentColor"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/><circle cx="15" cy="10" r="1.4" fill="currentColor"/>',
   };
   const icon = name => { const s = svgIcon(ICONS[name]); s.setAttribute('viewBox', '0 0 20 20'); return s; };
@@ -1131,8 +1224,9 @@
       $('div', { class: 'lb-menu-wrap' }, moreBtn, ui.menu),
       $('div', { class: 'lb-menu-wrap' }, shieldBtn, ui.pmenu));
 
+    ui.sideBtn = btn('lbSidebar', 'Show or hide the page overview', 'pages', () => setSidebar(!side.open), { cls: 'lb-side-btn' });
     const bar = $('header', { id: 'lbBar' },
-      $('div', { class: 'lb-row' }, ui.title, nav, zoom, tools, pages, right));
+      $('div', { class: 'lb-row' }, ui.sideBtn, ui.title, nav, zoom, tools, pages, right));
     document.body.prepend(bar);
     document.body.classList.add('lb-custom');
     // pdf.js lays out the pages below var(--toolbar-height): make that our bar's height.
@@ -1141,6 +1235,22 @@
       document.documentElement.style.setProperty('--lb-bar-h', bar.offsetHeight + 'px');
     };
     new ResizeObserver(fit).observe(bar); fit();
+    // Rather than wrap to a second row, drop labels step by step until the bar
+    // fits: tool labels, the save text (its dot stays), page button labels, the
+    // logbook name. Every button keeps its tooltip. Phones may still wrap.
+    const row = bar.firstElementChild, steps = ['lb-c1', 'lb-c2', 'lb-c3', 'lb-c4'];
+    const wraps = () => { const kids = [...row.children].filter(k => k.offsetParent);
+      return kids.some(k => k.offsetTop > kids[0].offsetTop + 8); };
+    const compact = () => {
+      bar.classList.remove(...steps);
+      for (const s of steps) { if (!wraps()) break; bar.classList.add(s); }
+    };
+    let compactFrame = 0;
+    const recompact = () => { cancelAnimationFrame(compactFrame); compactFrame = requestAnimationFrame(compact); };
+    window.addEventListener('resize', recompact);
+    new MutationObserver(recompact).observe(row, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+    recompact();
+    buildSidebar();
     document.addEventListener('click', e => {
       if (!ui.menu.contains(e.target) && !ui.pmenu.contains(e.target)) closeMenu();
     });
@@ -1234,6 +1344,87 @@
     document.title = name + ' · NB2420 logbook';
   }
 
+  // ----------------------------------------------------------- page sidebar
+  // Our own page overview: pdf.js's sidebar also merges and reorders files,
+  // which a logbook must not do. Thumbnails render when they scroll into view
+  // (with what is typed and drawn so far); click one to go to that page.
+  const SIDE_KEY = 'nb2420-sidebar', THUMB_W = 104;
+  const side = { el: null, list: null, observer: null, open: false, doc: null, gen: 0 };
+  const sideWanted = () => {
+    try { const v = localStorage.getItem(SIDE_KEY); if (v) return v === 'open'; } catch (_) {}
+    return innerWidth >= 1100;
+  };
+  function buildSidebar() {
+    side.list = $('div', { class: 'lb-side-list' });
+    side.el = $('nav', { id: 'lbSide', 'aria-label': 'Page overview' }, side.list);
+    document.body.append(side.el);
+    setSidebar(sideWanted(), false);
+  }
+  function setSidebar(open, remember = true) {
+    side.open = open;
+    document.body.classList.toggle('lb-side-open', open);
+    side.el.inert = !open;
+    ui.sideBtn?.setAttribute('aria-pressed', String(open));
+    ui.sideBtn?.classList.toggle('lb-on', open);
+    if (remember) { try { localStorage.setItem(SIDE_KEY, open ? 'open' : 'closed'); } catch (_) {} }
+    if (open) fillSidebar();
+    window.dispatchEvent(new Event('resize'));          // pdf.js fits the page to the new width
+  }
+  function fillSidebar() {
+    const a = app(), doc = a?.pdfDocument;
+    if (!side.list || !doc || !side.open) return;
+    if (side.doc === doc && side.list.children.length === a.pagesCount) { markCurrent(); return; }
+    side.doc = doc;
+    const gen = ++side.gen;
+    side.observer?.disconnect();
+    side.list.replaceChildren();
+    side.observer = new IntersectionObserver(entries => {
+      for (const e of entries) if (e.isIntersecting) { side.observer.unobserve(e.target); drawThumb(e.target, gen); }
+    }, { root: side.el, rootMargin: '300px' });
+    for (let n = 1; n <= a.pagesCount; n++) {
+      const vp = a.pdfViewer.getPageView(n - 1)?.viewport;
+      const canvas = $('canvas', { class: 'lb-thumb-canvas' });
+      canvas.style.aspectRatio = vp ? `${vp.width} / ${vp.height}` : '1 / 1.414';
+      const item = $('button', { type: 'button', class: 'lb-thumb', id: 'lbThumb_' + n, 'data-page': n, 'aria-label': 'Page ' + n,
+        onclick: () => { a.pdfViewer.currentPageNumber = n; if (innerWidth < 700) setSidebar(false, false); } },
+        canvas, $('span', { class: 'lb-thumb-num' }, String(n)));
+      side.list.append(item);
+      side.observer.observe(item);
+    }
+    markCurrent();
+  }
+  async function drawThumb(item, gen) {
+    const n = +item.dataset.page, canvas = item.querySelector('canvas');
+    try {
+      const page = await app().pdfDocument.getPage(n);
+      if (gen !== side.gen) return;
+      const base = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: THUMB_W * (window.devicePixelRatio || 1) / base.width });
+      canvas._lbTask?.cancel();             // a redraw replaces one still running
+      await canvas._lbTask?.promise.catch(() => {});
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      const mode = globalThis.pdfjsLib?.AnnotationMode?.ENABLE_STORAGE ?? 3;   // include typed answers
+      const task = canvas._lbTask = page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport: vp, annotationMode: mode });
+      await task.promise;
+    } catch (err) {
+      if (err?.name !== 'RenderingCancelledException') console.warn('[logbook] thumbnail', n, err);
+    }
+  }
+  let lastPage = 1;
+  function markCurrent() {
+    if (!side.list) return;
+    const cur = app()?.pdfViewer?.currentPageNumber || 1;
+    // Redraw the page just left, so its thumbnail shows what was typed there.
+    if (side.open && lastPage !== cur) { const prev = side.list.querySelector(`[data-page="${lastPage}"]`); if (prev) drawThumb(prev, side.gen); }
+    lastPage = cur;
+    for (const it of side.list.children) {
+      const on = +it.dataset.page === cur;
+      it.classList.toggle('lb-current', on);
+      if (on) it.setAttribute('aria-current', 'page'); else it.removeAttribute('aria-current');
+    }
+    side.list.querySelector('.lb-current')?.scrollIntoView({ block: 'nearest' });
+  }
+
   function updateDeleteButton() {
     syncPage();
     if (!ui.del) return;
@@ -1247,7 +1438,7 @@
     if (!pv || !pv.div) return;
     pv.div.querySelectorAll('.lb-slot').forEach(e => e.remove());
     for (const slot of state.slots) {
-      if (templateIndexOf(slot.ordinal) !== pageNumber - 1) continue;
+      if (slotPageIndex(slot) !== pageNumber - 1) continue;
       // pdf.js 6 dropped convertToViewportRectangle; map both corners instead.
       const [x1, y1] = pv.viewport.convertToViewportPoint(slot.rect[0], slot.rect[1]);
       const [x2, y2] = pv.viewport.convertToViewportPoint(slot.rect[2], slot.rect[3]);
@@ -1428,6 +1619,7 @@
     syncTitle();
     updateDeleteButton();
     for (let i = 1; i <= a.pagesCount; i++) decoratePage(i);
+    fillSidebar();
     state.reopening = false;
     if (state.onAnalysed) { state.onAnalysed(); state.onAnalysed = null; }
     if (fresh) {
@@ -1477,7 +1669,7 @@
       }));
       a.eventBus.on('pagerendered', ({ pageNumber }) => decoratePage(pageNumber));
       a.eventBus.on('annotationlayerrendered', ({ pageNumber }) => attachHints(pageNumber));
-      a.eventBus.on('pagechanging', updateDeleteButton);
+      a.eventBus.on('pagechanging', () => { updateDeleteButton(); markCurrent(); });
     });
   }, 20);
 
@@ -1487,7 +1679,8 @@
       id: state.id, slots: state.slots, exercises: state.exercises, pageInfo: state.pageInfo, images: state.images,
     })),
     // Takes the id of a file input, so test drivers in sandboxes need not pass a function.
-    setTestFile: id => { testFileHook = () => document.getElementById(id)?.files[0] || null; },
+    setTestFile: id => { testFileHook = all => { const f = document.getElementById(id)?.files || [];
+      return all ? [...f] : f[0] || null; }; },
     autosaveNow, exportPdf,
     // Export bytes with a scripted overflow choice ('all' | 'overflow' | 'shrink'), and the items it was asked about.
     exportBytesWith: async pick => { let asked = []; const b = await flattenedBytes(items => {
