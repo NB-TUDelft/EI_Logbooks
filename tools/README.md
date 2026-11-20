@@ -57,7 +57,11 @@ like a label) can shift or break the table.
 | `outline_template.py` | draws the templates' printed text as outlines, so Turnitin compares only the answers |
 | `requirements.txt` | what the build installs, including the newest renderer from GitHub |
 
-To build locally: `pip install -r tools/requirements.txt`, then
-`python tools/sync_templates.py` and `python tools/build_logbooks.py`.
-`sync_templates.py` also takes the path of a local checkout of the book, to
-try a change before it is pushed there.
+To build and view locally:
+
+```
+pip install -r tools/requirements.txt
+python tools/sync_templates.py        # or: ... sync_templates.py <path to the book>
+python tools/build_logbooks.py
+cd site && python -m http.server 8765
+```

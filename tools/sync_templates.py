@@ -9,7 +9,7 @@ book/manuals/week*/<n.m>_<Title>_logbook.typ into templates/, points its
 import at our own logbook_common.typ, and removes templates/<n.m>_..._logbook.typ
 files the book no longer has. logbook_common.typ, highlight.txt, the README and
 files whose names don't match the pattern (the BACKUP starter) are ours and
-are left alone. The GitHub workflow runs it before every build and every night.
+are left alone. The GitHub workflow runs it at the start of every run, at least hourly.
 
 Our logbook_common.typ is not copied: it has the site's extras (image boxes,
 bookmarks for the exercises). It warns when the book's copy defines something

@@ -1,6 +1,8 @@
 # Logbooks shown in the Highlight box at the top of the start page.
-# One line per change: "YYYY-MM-DD id id ..." applies from that date (Amsterdam time)
-# until a later line takes over. A line without a date always applies.
-# The site checks every night, so a future line switches the box by itself.
-# Only ids on the latest line that has started are shown. "none" = no box.
-2.2
+# One line per change: "YYYY-MM-DD HH:MM id id ..." applies from that moment
+# (Amsterdam time; no time = midnight) until a later line takes over.
+# A line without a date always applies. The site checks every hour, so a
+# future line switches the box by itself. "none" = no box.
+3.1
+2026-11-24 18:00 1.1 1.2 2.1 2.2 3.1
+2026-11-27 18:00 4.1

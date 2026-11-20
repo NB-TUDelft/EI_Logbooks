@@ -33,21 +33,22 @@ Everything runs in the student's own browser; nothing is uploaded.
 | Folder | What | When you need it |
 |--------|------|------------------|
 | [course book](https://github.com/NB-TUDelft/Electronic_Instrumentation) `book/manuals/weekN/` | the logbooks, as Typst files: **the one place to write them** | adding or changing a logbook |
-| [`templates/`](templates/) | a copy of those, made by the workflow, plus our shared parts and the Highlight list | the Highlight box; how the copy works |
+| [`templates/`](templates/) | a copy of those, plus our shared parts and the Highlight list | the Highlight box |
 | [`site/`](site/) | the website | changing how the site works |
 | [`site/logbook/aliases.json`](site/logbook/aliases.json) | maps old logbook numbers to new ones, so students keep their saved work ([how](templates/README.md#students-saved-work)) | merging or renumbering a logbook |
 | [`tools/`](tools/) | all submissions into one table, and the build scripts | reading handed-in logbooks |
 
 ## How it publishes
 
-Every push to `main`, and every night, runs [the workflow](.github/workflows/pages.yml).
-It first copies the logbooks from the course book into `templates/`, then
-publishes the site on GitHub Pages. Only when a logbook (or the build tools)
-changed does it rebuild the PDFs, with the newest version of the
-[renderer](https://github.com/NB-TUDelft/sphinx-typst-render), and commit them
-together with the copied logbooks, the logbook list and the links above. A
-change in the book is on the site the next morning, or within minutes once the
-book's workflow tells this one (a `book-logbooks-changed` repository dispatch).
-To do it straight away:
-**Actions** → *build and publish* → **Run workflow**. If it fails with "No artifacts named
-github-pages", that is GitHub, not you: press **Re-run jobs**.
+[The workflow](.github/workflows/pages.yml) copies the logbooks from the course
+book into `templates/`, rebuilds the PDFs if one changed, and publishes the site.
+It runs:
+
+- on every push to `main` here;
+- when a logbook changes in the course book: its workflow sends a
+  `book-logbooks-changed` signal (not added to the book yet; needs its
+  `LOGBOOKS_DISPATCH_TOKEN` secret);
+- every hour (only publishing when something changed);
+- by hand: **Actions** → *build and publish* → **Run workflow**.
+
+"No artifacts named github-pages"? That is GitHub: press **Re-run jobs**.
