@@ -45,9 +45,9 @@ book into `templates/`, rebuilds the PDFs if one changed, and publishes the site
 It runs:
 
 - on every push to `main` here;
-- when a logbook changes in the course book (once the book has its notify
-  workflow): it sends a
-  `book-logbooks-changed` signal (needs its `LOGBOOKS_DISPATCH_TOKEN` secret);
+- when a logbook changes in the course book: its workflow sends a
+  `book-logbooks-changed` signal (not added to the book yet; needs its
+  `LOGBOOKS_DISPATCH_TOKEN` secret);
 - every night;
 - by hand: **Actions** → *build and publish* → **Run workflow**.
 
