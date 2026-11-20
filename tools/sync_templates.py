@@ -1,7 +1,7 @@
 """Copy the logbook templates from the course book into templates/.
 
 Usage: python tools/sync_templates.py [path to a checkout of the book]
-       python tools/sync_templates.py --check <path to a checkout of the book>
+       python tools/sync_templates.py --check [--compile] <path to a checkout of the book>
 Needs: git (only when no path is given)
 
 The course book (NB-TUDelft/Electronic_Instrumentation, book/manuals/weekN/)
@@ -16,7 +16,10 @@ It first checks the book and copies nothing if anything is wrong (a misnamed
 logbook, a number in the wrong week folder, two files with one number, an
 import the site doesn't have). It then exits with an error, so the workflow
 fails and the site keeps its last good version. --check only checks; the
-course book's own workflow runs that.
+course book's own workflow runs that. With --compile it also compiles every
+logbook-looking file with the site's logbook_common.typ (needs
+sphinx-typst-render), so an entry with a good name but broken contents fails
+in the book too, and every problem is listed at once.
 
 Our logbook_common.typ is not copied: it has the site's extras (image boxes,
 bookmarks for the exercises). It warns when the book's copy defines something
@@ -27,6 +30,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
 if hasattr(sys.stdout, 'reconfigure'):
@@ -41,6 +45,7 @@ NAME = re.compile(r'(\d+)\.(\d+)_[^\s/]+_logbook\.typ')
 IMPORT = re.compile(r'#import\s+"\.\./logbook_common\.typ"')
 FILE_USE = re.compile(r'#(?:import|include)\s+"([^"]+)"|\b(?:image|read|json|csv|yaml|toml)\(\s*"([^"]+)"')
 DEFINES = re.compile(r'^#let\s+([A-Za-z_][\w-]*)', re.M)
+SITE_COMMON = 'https://raw.githubusercontent.com/NB-TUDelft/EI_Logbooks/main/templates/logbook_common.typ'
 HOW = 'name it <n.m>_<Title_with_underscores>_logbook.typ, e.g. 3.2_Active_filters_logbook.typ'
 
 
@@ -85,6 +90,35 @@ def check(book):
     if not found and not problems:
         problems.append(f'no logbooks found in {MANUALS}/week*/ of the book.')
     return found, problems
+
+
+def compile_problems(book):
+    """Compile every logbook-looking file in the book the way the site builds
+    it (with the site's logbook_common.typ); one problem per file that fails."""
+    from sphinx_typst_render._compile import RenderRequest, render, stage_field_library
+    ours = TEMPLATES / 'logbook_common.typ'
+    if ours.exists():
+        common = ours.read_text(encoding='utf-8')
+    else:                                   # run from a downloaded copy, e.g. by the book's workflow
+        with urllib.request.urlopen(SITE_COMMON, timeout=30) as r:
+            common = r.read().decode('utf-8')
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / 'root'
+        root.mkdir()
+        (root / 'logbook_common.typ').write_text(common, encoding='utf-8')
+        stage_field_library(root)
+        candidates = [p for p in (book / MANUALS).glob('week*/**/*.typ') if 'logbook' in p.name.lower()]
+        for i, src in enumerate(sorted(candidates)):
+            rel = src.relative_to(book).as_posix()
+            entry = root / f'entry{i}.typ'
+            entry.write_text(IMPORT.sub('#import "logbook_common.typ"', src.read_text(encoding='utf-8')), encoding='utf-8')
+            try:
+                render(RenderRequest(source=entry, root=root, preview='none', fillable=True), Path(tmp) / f'cache{i}')
+            except Exception as error:
+                first = str(error).strip().splitlines()[0] if str(error).strip() else type(error).__name__
+                problems.append(f'{rel}: does not compile: {first}')
+    return problems
 
 
 def sync(book):
@@ -132,8 +166,13 @@ def fail(problems):
 def main():
     args = sys.argv[1:]
     if args[:1] == ['--check']:
-        book = Path(args[1] if len(args) > 1 else '.').resolve()
+        rest = args[1:]
+        compile_too = '--compile' in rest
+        rest = [a for a in rest if a != '--compile']
+        book = Path(rest[0] if rest else '.').resolve()
         found, problems = check(book)
+        if compile_too:
+            problems += compile_problems(book)
         if problems:
             fail(problems)
         print(f'{len(found)} logbooks, all fine')
