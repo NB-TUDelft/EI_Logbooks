@@ -135,14 +135,16 @@ body.lb-busy #lbSaveBadge::after { content: ""; display: inline-block; width: 10
   background: #f6fbfd; pointer-events: auto; cursor: pointer; }
 .lb-slot:not(.lb-filled):hover { background: #eaf6fb; }
 
-/* Form fields: quiet tint instead of pdf.js's bright blue, white with an accent ring while typing. */
+/* Form fields: quiet tint instead of pdf.js's bright blue, an accent ring while typing.
+   The tint must stay see-through: pdf.js paints drawings and dropped images on the
+   page canvas, which sits under the fields, so an opaque fill would hide them. */
 body.lb-custom .annotationLayer :is(.textWidgetAnnotation, .choiceWidgetAnnotation) :is(input, textarea, select) {
-  background-color: #f1f8fb !important; background-image: none !important; border: 1px solid #d5e7ef !important; border-radius: 2px;
+  background-color: rgba(0, 140, 190, .055) !important; background-image: none !important; border: 1px solid #d5e7ef !important; border-radius: 2px;
   color: var(--lb-ink);
 }
 body.lb-custom .annotationLayer :is(.textWidgetAnnotation, .choiceWidgetAnnotation) :is(input, textarea, select):hover { border-color: rgba(0, 166, 214, .45) !important; }
 body.lb-custom .annotationLayer :is(.textWidgetAnnotation, .choiceWidgetAnnotation) :is(input, textarea, select):focus {
-  background-color: #fff !important; border-color: var(--lb-accent) !important; outline: 0; box-shadow: 0 0 0 3px rgba(0, 166, 214, .18);
+  background-color: transparent !important; border-color: var(--lb-accent) !important; outline: 0; box-shadow: 0 0 0 3px rgba(0, 166, 214, .18);
 }
 .lb-slot-bar { pointer-events: auto; display: flex; gap: 6px; margin: 8px; transition: opacity .15s; }
 .lb-slot.lb-filled .lb-slot-bar { opacity: 0; }
