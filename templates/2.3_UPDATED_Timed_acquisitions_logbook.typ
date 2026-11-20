@@ -1,4 +1,4 @@
-#import "../logbook_common.typ": *
+#import "logbook_common.typ": *
 
 #show: logbook.with(
   title: "Log Book Entry 2.2",
