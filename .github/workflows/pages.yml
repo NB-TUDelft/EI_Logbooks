@@ -1,20 +1,23 @@
 # Publishes site/ to GitHub Pages on every push to main
 # (repo settings: Pages source = GitHub Actions).
 #
-# The logbook PDFs are only rebuilt when something they depend on changed
-# (templates/, the build tools, or this file), or when started by hand from the
-# Actions tab. The build uses the newest sphinx-typst-render from its GitHub
-# main branch and commits the PDFs, index.json and README links back, so later
-# site-only pushes publish them without rebuilding.
+# The logbooks are written in the course book (NB-TUDelft/Electronic_Instrumentation,
+# book/manuals/weekN/). Every run, and every night, first copies them into
+# templates/ (tools/sync_templates.py). The PDFs are only rebuilt when something
+# they depend on changed (the copied templates, the build tools, or this file),
+# or when started by hand from the Actions tab. The build uses the newest
+# sphinx-typst-render from its GitHub main branch and commits the templates,
+# PDFs, index.json and README links back, so later site-only pushes publish
+# them without rebuilding.
 name: build and publish
 on:
   push:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '15 0 * * *'   # nightly: switches the Highlight box on the dates in templates/highlight.txt
+    - cron: '15 0 * * *'   # nightly: picks up changes in the course book, and switches the Highlight box on the dates in templates/highlight.txt
 permissions:
-  contents: write      # commit the built PDFs and README links
+  contents: write      # commit the copied templates, built PDFs and README links
   pages: write
   id-token: write
 concurrency: { group: pages, cancel-in-progress: false }
@@ -29,9 +32,14 @@ jobs:
       - id: pages                 # gives the site's real address (base_url)
         uses: actions/configure-pages@v5
 
+      - name: Copy the templates from the course book
+        id: sync
+        run: python3 tools/sync_templates.py
+
       - name: Did the templates change?
         id: changed
         run: |
+          if [ -n "$(git status --porcelain templates)" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           before="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = "schedule" ]; then echo "build=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "${{ github.event_name }}" != "push" ] || ! git cat-file -e "$before^{commit}" 2>/dev/null; then
@@ -56,13 +64,13 @@ jobs:
       - name: README links (site address and logbook list, every run)
         run: python3 tools/build_logbooks.py --links-only
         env: { SITE_URL: "${{ steps.pages.outputs.base_url }}/" }
-      - name: Commit the build and README
+      - name: Commit the templates, build and README
         run: |
-          git add -A site/logbooks README.md
+          git add -A templates site/logbooks README.md
           if ! git diff --cached --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Build logbook PDFs / update README links"
+            git commit -m "Build logbook PDFs / update README links" -m "Templates from the course book at ${{ steps.sync.outputs.commit }}."
             git push
           fi
 

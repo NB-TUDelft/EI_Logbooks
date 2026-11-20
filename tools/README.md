@@ -52,9 +52,12 @@ like a label) can shift or break the table.
 
 | File | |
 |------|-|
+| `sync_templates.py` | copies the logbooks from the course book (`book/manuals/week*/`) into `templates/`; the workflow runs it first |
 | `build_logbooks.py` | builds `site/logbooks/` from `templates/`; the workflow runs it |
 | `outline_template.py` | draws the templates' printed text as outlines, so Turnitin compares only the answers |
 | `requirements.txt` | what the build installs, including the newest renderer from GitHub |
 
 To build locally: `pip install -r tools/requirements.txt`, then
-`python tools/build_logbooks.py`.
+`python tools/sync_templates.py` and `python tools/build_logbooks.py`.
+`sync_templates.py` also takes the path of a local checkout of the book, to
+try a change before it is pushed there.
