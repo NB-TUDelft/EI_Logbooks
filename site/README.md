@@ -17,7 +17,10 @@ Static files, published as-is to GitHub Pages. No server code.
   BMP, SVG and PDF figures (page 1) work; HEIC only in Safari.
 - A Draw tool, for sketches on any page.
 - Extra pages at the end: a text page, or an image page with a grid of image
-  boxes (1 up to 3 across and 6 down) and a notes box.
+  boxes (1 up to 3 across and 6 down) and a notes box. Both ask which part of
+  the logbook they belong to: a section, or a sub-part (`subsection()`).
+- Answers keep their box's size; what doesn't fit is marked yellow and moves
+  to an extra page on export, unless the student chooses to shrink it.
 - A page overview on the left, toggled from the bar.
 - Autosave in the browser, per logbook number, and Export PDF to hand in.
 

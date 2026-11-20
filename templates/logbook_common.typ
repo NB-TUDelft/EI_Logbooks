@@ -45,6 +45,17 @@
   v(4pt)
 }
 
+// A sub-heading inside a section, e.g. #subsection([Square wave harmonics],
+// note: [Tasks A2 and I2]). It looks like a bold line with a small note, and
+// adds a bookmark under its section, which the logbook editor offers as a
+// sub-part when students add an image or text page. Put the rest of the
+// heading line (a prompt, say) right after it.
+#let subsection(title, note: none) = {
+  place(hide(heading(level: 2, outlined: true, bookmarked: true, title)))
+  [*#title*]
+  if note != none [#h(6pt) #hint(note)]
+}
+
 // Reserved image slot for the logbook editor. It is a named text field
 // `img_<name>` sized to the box, so the editor can read its position from the
 // PDF widget and place a chosen image there. The height is fixed, so the text

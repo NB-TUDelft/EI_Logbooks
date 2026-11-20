@@ -341,10 +341,13 @@
   }
 
   // ----------------------------------------------------------- reading
+  // Sections and their sub-parts (subsection() in the templates), in page order.
+  // A sub-part's title is "SECTION (Tasks ...) › Sub-part", so tags stay readable
+  // on their own; `label` and `depth` are for the dropdown.
   async function readOutline(doc) {
     const out = [];
     const items = (await doc.getOutline()) || [];
-    const walk = async list => {
+    const walk = async (list, parent = null, depth = 0) => {
       for (const it of list) {
         let page = -1, top = null;
         try {
@@ -355,8 +358,9 @@
             if (dest[1] && dest[1].name === 'XYZ' && typeof dest[3] === 'number') top = dest[3];
           }
         } catch (_) {}
-        out.push({ title: it.title, page, top });
-        if (it.items && it.items.length) await walk(it.items);
+        const title = parent ? `${parent} › ${it.title}` : it.title;
+        out.push({ title, label: it.title, depth, page, top });
+        if (it.items && it.items.length) await walk(it.items, title, depth + 1);
       }
     };
     await walk(items);
@@ -553,7 +557,8 @@
   async function insertBlankPage() {
     const a = app();
     const at = a.pagesCount;
-    const exercise = exerciseForPage(a.pdfViewer.currentPageNumber - 1);
+    const exercise = await askTextPage(exerciseForPage(a.pdfViewer.currentPageNumber - 1));
+    if (!exercise) return;
     await transform(async pl => {
       const { width: W, height: H } = pl.getPage(0).getSize();
       const page = pl.insertPage(at, [W, H]);
@@ -680,10 +685,29 @@
 
   // Exercise and layout for a new image page. The layout picker works like
   // Word's insert-table grid: hover to preview, click to choose.
+  // The exercise picker for added pages: sections, with their sub-parts indented.
+  function exerciseSelect(preselect) {
+    const seen = new Set(), opts = [];
+    for (const e of [...state.exercises, { title: GENERAL, label: GENERAL, depth: 0 }]) {
+      if (seen.has(e.title)) continue;
+      seen.add(e.title);
+      const o = $('option', { value: e.title }, '\u00a0\u00a0\u00a0\u00a0'.repeat(e.depth || 0) + (e.label || e.title));
+      if (e.title === preselect) o.selected = true;
+      opts.push(o);
+    }
+    return $('select', { class: 'lb-select', 'aria-label': 'Exercise' }, ...opts);
+  }
+
+  function askTextPage(preselect) {
+    const select = exerciseSelect(preselect);
+    return modal('Add text page', [
+      $('p', { class: 'lb-modal-text' }, 'The text goes on a new page at the end.'),
+      $('label', { class: 'lb-field' }, $('span', {}, 'Which exercise is it for?'), select)],
+      [{ text: 'Cancel', value: null }, { text: 'Add page', primary: true, id: 'lbTextPageOk', value: () => select.value }]);
+  }
+
   function askImagePage(preselect) {
-    const choices = [...new Set([...state.exercises.map(e => e.title), GENERAL])];
-    const select = $('select', { class: 'lb-select', 'aria-label': 'Exercise' },
-      ...choices.map(c => { const o = $('option', {}, c); if (c === preselect) o.selected = true; return o; }));
+    const select = exerciseSelect(preselect);
     let pick = { cols: 1, rows: 1 };
     const label = $('span', { class: 'lb-grid-label', 'aria-live': 'polite' });
     const grid = $('div', { class: 'lb-grid', role: 'grid', 'aria-label': 'Images on the page' });

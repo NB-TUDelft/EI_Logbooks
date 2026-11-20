@@ -45,8 +45,9 @@ book into `templates/`, rebuilds the PDFs if one changed, and publishes the site
 It runs:
 
 - on every push to `main` here;
-- when a logbook changes in the course book: its "log book entries" workflow
-  sends a `book-logbooks-changed` signal (once the book has its
+- when the course book asks: after its own check passes, the book's deploy
+  starts this workflow for that exact book commit and waits for the result, so
+  a failure here turns the book's run red too (once the book has its
   `LOGBOOKS_DISPATCH_TOKEN` secret);
 - every night (only publishing when something changed);
 - by hand: **Actions** → *build and publish* → **Run workflow**.
