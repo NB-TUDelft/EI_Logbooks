@@ -1,6 +1,7 @@
 # Site
 
-Static files, published as-is to GitHub Pages. No server code.
+Archived. `index.html` and `pdfjs/web/viewer.html` send visitors to the
+logbooks in the course book. The rest is the old site, kept for reference.
 
 | Path | What |
 |------|------|
