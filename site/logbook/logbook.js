@@ -73,6 +73,7 @@
   const ansi = s => String(s).replace(/[‒-―]/g, '-').replace(/[^\x20-\x7e\xa0-\xff\n]/g, '?');
   const nowIso = () => new Date().toISOString();
   const toast = (msg, ms = 3500) => {
+    document.querySelectorAll('.lb-toast').forEach(old => old.remove());   // one message at a time
     const t = $('div', { class: 'lb-toast', role: 'status' }, msg);
     document.body.append(t);
     setTimeout(() => t.remove(), ms);
@@ -112,6 +113,9 @@
       } finally { task.destroy(); }
     }
     try { return await createImageBitmap(file); } catch (err) {
+      // Only SVG needs an <img>: an <img> also "decodes" a broken JPEG or PNG
+      // (cut off halfway, say) without an error, and would put half a picture in.
+      if (!(file.type === 'image/svg+xml' || /\.svgz?$/i.test(file.name))) throw err;
       const url = URL.createObjectURL(file);
       try {
         const img = new Image();
@@ -429,16 +433,21 @@
     }
     for (const s of state.slots) {
       if (s.pageId) continue;               // a box on an added page keeps the exercise it was made for
-      const page = templateIndexOf(s.ordinal);
-      // section that starts above the slot's top edge on its page, or earlier
-      const slotTop = Math.max(s.rect[1], s.rect[3]);
-      let found = null;
-      for (const e of state.exercises) {
-        if (e.page < 0) continue;
-        if (e.page < page || (e.page === page && (e.top === null || e.top >= slotTop))) found = e.title;
-      }
-      s.exercise = s.exercise || found || GENERAL;
+      s.exercise = s.exercise || exerciseAt(templateIndexOf(s.ordinal), Math.max(s.rect[1], s.rect[3]));
     }
+  }
+
+  // The section or sub-part that starts above a point (its top edge, in PDF
+  // units) on a page, or earlier. Added pages carry their own.
+  function exerciseAt(page, top) {
+    const pi = state.pageInfo[page];
+    if (pi && pi.added && pi.exercise) return pi.exercise;
+    let found = null;
+    for (const e of state.exercises) {
+      if (e.page < 0) continue;
+      if (e.page < page || (e.page === page && (e.top === null || e.top >= top))) found = e.title;
+    }
+    return found || GENERAL;
   }
 
   // ------------------------------------------------------------ rewriting
@@ -598,7 +607,7 @@
       catch (err) { toast(`Could not read ${file.name} (${err.message}). Try a JPEG or PNG.`); }
     }
     if (!recs.length) return;
-    if (files.length > cols * rows) toast(`Only the first ${cols * rows} images fit on this page.`);
+    if (files.length > cols * rows) toast(cols * rows === 1 ? 'Only the first image fits on this page.' : `Only the first ${cols * rows} images fit on this page.`);
     await transform(async pl => {
       const { width: W, height: H } = pl.getPage(0).getSize();
       const page = pl.insertPage(at, [W, H]);
@@ -818,13 +827,21 @@
   }
   // Where a too-long answer is cut: after the last ".", "!", "?" or line break whose text
   // still fits (leaving `extraLines` free for the reference); else the last space; else 0.
+  // A longer start never fits better than a shorter one, so a binary search
+  // finds the last cut that fits: a handful of tries instead of one per word,
+  // which kept long answers from freezing the page on every keystroke and zoom.
   function splitPoint(font, text, w, h, size, extraLines) {
     const ok = n => fitsAt(font, text.slice(0, n).trimEnd(), true, w, h, size, extraLines);
-    let best = 0;
-    for (const m of text.matchAll(/[.!?](?=\s|$)|\n/g)) { if (ok(m.index + 1)) best = m.index + 1; else break; }
-    if (best) return best;
-    for (const m of text.matchAll(/\s+/g)) { if (ok(m.index)) best = m.index; else break; }
-    return best;
+    const lastOk = cuts => {
+      let lo = 0, hi = cuts.length - 1, best = 0;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (ok(cuts[mid])) { best = cuts[mid]; lo = mid + 1; } else hi = mid - 1;
+      }
+      return best;
+    };
+    return lastOk([...text.matchAll(/[.!?](?=\s|$)|\n/g)].map(m => m.index + 1))
+      || lastOk([...text.matchAll(/\s+/g)].map(m => m.index));
   }
 
   function drawFieldText(page, font, charset, rect, value, da, ff, q, opts = {}) {
@@ -1070,7 +1087,7 @@
         pg = pl.addPage([PW, PH0]); key = fontKey(pg);
         const n = pl.getPageCount(); pages.push(n);
         label(pg, key, `[[NB2420:page n="${n}" kind="overflow"${attr('field', o.name)}]]`, 2, PH0 - 6);
-        exact.pages.push({ n, kind: 'overflow', exercise: null, field: o.name });
+        exact.pages.push({ n, kind: 'overflow', exercise: exerciseAt(o.t.pageNo - 1, Math.max(o.t.rect[1], o.t.rect[3])), field: o.name });
         y = PH0 - M;
       };
       newPage();
@@ -1504,6 +1521,46 @@
     measurer.avg = size => measurer.widthOfTextAtSize('etaoinshrdlucmfwyp ', size) / 19;
     return measurer;
   }
+  // pdf.js hides the form layer for a moment while it redraws at a new zoom,
+  // which takes the cursor out of the box being typed in. Put it back, with
+  // the same selection, once the box is shown again (unless the student has
+  // clicked somewhere else by then). Its hint then comes back with it.
+  const MAX_ZOOM = 4;
+  // Watched until the student clicks or types somewhere else (or 10 s pass):
+  // pdf.js can redraw, and drop the cursor, a while after the zoom itself.
+  let zoomFocus = null;
+  function keepFocusThroughZoom() {
+    const el = document.activeElement;
+    if (el && el.closest && el.closest('.annotationLayer') && 'selectionStart' in el)
+      zoomFocus = { el, start: el.selectionStart, end: el.selectionEnd, scroll: el.scrollTop };
+    if (!zoomFocus) return;
+    const z = zoomFocus, running = !!z.until;
+    z.until = performance.now() + 10000;
+    if (running) return;
+    const elsewhere = e => { if (!z.el.contains(e.target) && !e.ctrlKey && !e.metaKey && e.key !== 'Control') stop(); };
+    const stop = () => {
+      if (zoomFocus === z) zoomFocus = null;
+      document.removeEventListener('pointerdown', elsewhere, true);
+      document.removeEventListener('keydown', elsewhere, true);
+    };
+    document.addEventListener('pointerdown', elsewhere, true);
+    document.addEventListener('keydown', elsewhere, true);
+    const watch = () => {
+      if (zoomFocus !== z) return stop();
+      const active = document.activeElement;
+      if (performance.now() > z.until || !z.el.isConnected || (active !== document.body && active !== z.el)) return stop();
+      if (active === z.el) {                          // keep the latest selection
+        z.start = z.el.selectionStart; z.end = z.el.selectionEnd; z.scroll = z.el.scrollTop;
+      } else if (z.el.offsetParent && getComputedStyle(z.el).visibility !== 'hidden') {
+        z.el.focus({ preventScroll: true });
+        try { z.el.setSelectionRange(z.start, z.end); } catch (_) {}
+        z.el.scrollTop = z.scroll;
+      }
+      requestAnimationFrame(watch);
+    };
+    requestAnimationFrame(watch);
+  }
+
   // Every live box's update(). The yellow mark copies the box's font and padding
   // in px, so it is redrawn after each zoom (onZoom).
   const liveUpdates = new Set();
@@ -1681,7 +1738,11 @@
     a.initializedPromise.then(() => {
       wrapSave(a);
       buildBar();
-      a.eventBus.on('scalechanging', () => { syncZoom(); onZoom(); });
+      a.eventBus.on('scalechanging', ({ scale }) => {
+        if (scale > MAX_ZOOM + 1e-6) { a.pdfViewer.currentScale = MAX_ZOOM; return; }   // pdf.js itself goes to 1000 %
+        keepFocusThroughZoom();
+        syncZoom(); onZoom();
+      });
       a.eventBus.on('pagesloaded', () => { syncPage(); syncZoom(); });
       a.eventBus.on('annotationeditormodechanged', ({ mode }) => syncMode(mode));
       a.eventBus.on('documentloaded', () => onDocumentLoaded().catch(err => {
