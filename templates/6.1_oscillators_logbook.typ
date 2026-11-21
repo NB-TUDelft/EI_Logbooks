@@ -9,7 +9,7 @@
 #prompt[Assume $U_H = +10 V$ and $U_L = -10 V$ for your first predictions. You measure the actual output limits later.]
 #v(4pt)
 
-*Integrator slopes* #h(6pt) #hint[Task B2, with $R_c = 47"k"Omega$ and $C = 100"nF"$]
+#subsection([Integrator slopes], note: [Task B2, with $R_c = 47"k"Omega$ and $C = 100"nF"$])
 #v(3pt)
 #field_row(
   [Slope for an input of $+2 V$:], line_field("b2_slope_pos"),
@@ -17,7 +17,7 @@
 )
 
 #v(6pt)
-*Switching thresholds* #h(6pt) #hint[Task A2, with $R_a = 10"k"Omega$ and $R_b = 33"k"Omega$]
+#subsection([Switching thresholds], note: [Task A2, with $R_a = 10"k"Omega$ and $R_b = 33"k"Omega$])
 #v(3pt)
 #field_row(
   [Upper threshold $U_("T,up")$:], line_field("a2_ut_up"),
@@ -26,14 +26,14 @@
 )
 
 #v(6pt)
-*Why hysteresis?* #h(6pt) #prompt[In one or two sentences: what does the second threshold buy you when the input is noisy and slow?]
+#subsection([Why hysteresis?]) #h(6pt) #prompt[In one or two sentences: what does the second threshold buy you when the input is noisy and slow?]
 #area("b1_hysteresis", height: 46pt)
 
 #v(6pt)
 #pagebreak()
 #section("ONE OSCILLATION CYCLE", note: "Tasks B3, A3, S1, S2")
 
-*Predicted cycle* #h(6pt) #hint[Task A3]
+#subsection([Predicted cycle], note: [Task A3])
 #v(3pt)
 #field_row(
   [Slope of $U_("tri")$ while $U_q = U_H$:], line_field("a3_slope_high"),
@@ -44,7 +44,7 @@
 )
 
 #v(6pt)
-*What changes the cycle?* #h(6pt) #hint[Task A3 step 4]
+#subsection([What changes the cycle?], note: [Task A3 step 4])
 #v(3pt)
 #let ch(id, c) = (c, line_field(id + "_slope"), line_field(id + "_tri"), line_field(id + "_period"))
 #table(
@@ -57,7 +57,7 @@
 #section("CONCLUSIONS", note: "Tasks B3 and A3")
 
 #v(6pt)
-*The loop in your own words* #h(6pt) #prompt[Start from a positive comparator output and follow one full cycle. Name the threshold that ends each ramp, and say where the energy comes from.]
+#subsection([The loop in your own words]) #h(6pt) #prompt[Start from a positive comparator output and follow one full cycle. Name the threshold that ends each ramp, and say where the energy comes from.]
 #area("b3_cycle", height: 60pt)
 
 #closing(

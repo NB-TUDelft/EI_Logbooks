@@ -52,7 +52,7 @@
 #pagebreak()
 #section("SWEEP AND CONCLUSIONS", note: "Tasks A4, I3, I4, C3")
 
-*Frequency sweep* #h(6pt) #hint[10 Hz to 300 Hz, 1000 samples per point at a 0.2 ms target interval]
+#subsection([Frequency sweep], note: [10 Hz to 300 Hz, 1000 samples per point at a 0.2 ms target interval])
 #v(3pt)
 #field_row(
   [Helper amplitude setting [Vpp]:], line_field("i3_helper_vpp"),

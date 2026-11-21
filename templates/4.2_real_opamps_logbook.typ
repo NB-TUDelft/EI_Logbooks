@@ -59,7 +59,7 @@
 )
 
 #v(6pt)
-*Integrator* #h(6pt) #hint[Tasks A6, S3, I4, I5]
+#subsection([Integrator], note: [Tasks A6, S3, I4, I5])
 #v(3pt)
 #field_row(
   [Drift rate before taming:], line_field("int_drift"),

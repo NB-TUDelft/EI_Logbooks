@@ -5,7 +5,7 @@
   subtitle: "NB2420 Electronic Instrumentation " + sym.dot.c + " Manual 1.2 " + sym.dot.c + " Oscilloscope and filters",
 )
 
-*Coupling* #h(3pt) #hint[Tasks B1, A1 and I1, leading to C1]
+#subsection([Coupling], note: [Tasks B1, A1 and I1, leading to C1])
 #prompt[Square wave, 4 $U_"pp"$, 25 Hz, with a $-2$ V DC offset. Predict each average as homework, then measure it at the bench.]
 #v(2pt)
 
@@ -25,7 +25,7 @@
 )
 
 #v(3pt)
-*Triggering* #h(6pt) #hint[Tasks B2, A2 and I2, leading to C2]
+#subsection([Triggering], note: [Tasks B2, A2 and I2, leading to C2])
 #v(2pt)
 #table(
   columns: (1.5fr, 1.5fr, 1.5fr), align: horizon,
@@ -35,7 +35,7 @@
   [Slope changed rising to falling], line_field("tr_slope_pred"), line_field("tr_slope_obs"),
 )
 
-*Filter behaviour* #h(6pt) #hint[Task B3,A3,I3, leading to C3: 100 k#sym.Omega with 47 nF]
+#subsection([Filter behaviour], note: [Task B3,A3,I3, leading to C3: 100 k#sym.Omega with 47 nF])
 #v(3pt)
 #table(
   columns: (1.4fr, 1fr, 1fr, 1fr), align: horizon,

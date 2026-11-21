@@ -32,7 +32,7 @@
 )
 
 #v(6pt)
-*Bridge and ripple* #h(6pt) #hint[Tasks A3, A4, S2, I4]
+#subsection([Bridge and ripple], note: [Tasks A3, A4, S2, I4])
 #v(3pt)
 #field_row(
   [Capacitor chosen, and the ripple it should give:], line_field("cap_choice"),
@@ -41,13 +41,13 @@
 )
 
 #v(6pt)
-*Setup* #h(6pt) #prompt[Sketch one bridge current path from the source, through two elements, to the load and back. Mark which two conduct.]
+#subsection([Setup]) #h(6pt) #prompt[Sketch one bridge current path from the source, through two elements, to the load and back. Mark which two conduct.]
 #v(3pt)
 #sketchbox("setup", height: 150pt)
 
 #section("GROUNDS AND CONCLUSIONS", note: "Tasks A5, S3, I5, C1, C2")
 
-*Shared grounds* #h(6pt) #hint[Tasks S3 and I5]
+#subsection([Shared grounds], note: [Tasks S3 and I5])
 #v(3pt)
 #field_row(
   [What changed when the ground clip moved:], line_field("gnd_change"),
@@ -55,11 +55,11 @@
 )
 
 #v(6pt)
-*C1 Reading the matrix* #h(6pt) #prompt[At which currents did the 0.7 V model predict your measurement well? The series and shunt clippers share a diode and a resistor, so name what decides the shape. Why do the LED bridge and the silicon bridge share a topology but not a waveform?]
+#subsection([C1 Reading the matrix]) #h(6pt) #prompt[At which currents did the 0.7 V model predict your measurement well? The series and shunt clippers share a diode and a resistor, so name what decides the shape. Why do the LED bridge and the silicon bridge share a topology but not a waveform?]
 #area("c1", height: 66pt)
 
 #v(4pt)
-*C2 TA check-off* #h(6pt) #prompt[State one condition under which the 0.7 V model is adequate and one under which it is not, citing your own rows above.]
+#subsection([C2 TA check-off]) #h(6pt) #prompt[State one condition under which the 0.7 V model is adequate and one under which it is not, citing your own rows above.]
 #area("c2", height: 54pt)
 
 #closing(

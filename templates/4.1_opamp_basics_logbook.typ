@@ -22,7 +22,7 @@
 )
 
 #v(6pt)
-*Predicted, simulated, measured gain* #h(6pt) #hint[Task C2]
+#subsection([Predicted, simulated, measured gain], note: [Task C2])
 #v(3pt)
 #let gn(id, c) = (c, line_field(id + "_pred"), line_field(id + "_sim"), line_field(id + "_meas"), line_field(id + "_disc"))
 #table(
@@ -34,7 +34,7 @@
 )
 
 #v(6pt)
-*Buffer and transimpedance* #h(6pt) #hint[Tasks I3 and I5]
+#subsection([Buffer and transimpedance], note: [Tasks I3 and I5])
 #v(3pt)
 #field_row(
   [Source voltage without the buffer:], line_field("buf_without"),
@@ -45,7 +45,7 @@
 
 #v(6pt)
 #pagebreak()
-*Saturation* #h(6pt) #hint[Tasks S1 and S3]
+#subsection([Saturation], note: [Tasks S1 and S3])
 #v(3pt)
 #field_row(
   [Input amplitude where the output first clipped:], line_field("clip_in"),
@@ -56,11 +56,11 @@
 #section("CONCLUSIONS", note: "Tasks C3 and C4")
 
 #v(6pt)
-*C3 When do you reach for a buffer?* #h(6pt) #prompt[Use your Task I3 numbers. A gain of 1 sounds useless, so say what it actually buys you.]
+#subsection([C3 When do you reach for a buffer?]) #h(6pt) #prompt[Use your Task I3 numbers. A gain of 1 sounds useless, so say what it actually buys you.]
 #area("c3", height: 54pt)
 
 #v(4pt)
-*C4 A one-line design rule for saturation* #h(6pt) #prompt[Given a supply and a desired output swing, what is the largest input you may apply?]
+#subsection([C4 A one-line design rule for saturation]) #h(6pt) #prompt[Given a supply and a desired output swing, what is the largest input you may apply?]
 #area("c4", height: 46pt)
 
 #closing(

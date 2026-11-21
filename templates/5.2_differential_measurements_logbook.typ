@@ -8,7 +8,7 @@
 #section("BALANCE AND COMMON-MODE REJECTION", note: "Tasks I1, I2, I3 and C1")
 #prompt[Keep predictions and simulation traces beside this entry. Record raw readings before calculating gains. Voltages are in V.]
 #v(3pt)
-*Subtractor input test* #h(6pt) #hint[Task I2, reference at ground]
+#subsection([Subtractor input test], note: [Task I2, reference at ground])
 #v(3pt)
 #let electrical(id, label) = (
   label, line_field(id + "_ul"), line_field(id + "_ur"), line_field(id + "_out"),
@@ -36,7 +36,7 @@
 #line_field("i2_resolution")
 
 #v(5pt)
-*Equal illumination* #h(6pt) #hint[Tasks I1 and C1]
+#subsection([Equal illumination], note: [Tasks I1 and C1])
 #v(3pt)
 #let balance(id, label) = (
   label, line_field(id + "_before_ul"), line_field(id + "_before_ur"),
@@ -56,7 +56,7 @@
 
 #v(5pt)
 #pagebreak()
-*Full detector* #h(6pt) #hint[Task I3]
+#subsection([Full detector], note: [Task I3])
 #v(3pt)
 #table(
   columns: (1.25fr, 1fr, 1fr, 1fr), align: horizon,
@@ -100,7 +100,7 @@
   ..level("i4_far_right", [Far right]),
 )
 #v(5pt)
-*Shared-light check after trimming* #h(6pt) #hint[No directional torch; keep the same baseline]
+#subsection([Shared-light check after trimming], note: [No directional torch; keep the same baseline])
 #v(3pt)
 #table(
   columns: (1.2fr, 1fr, 1.1fr, 1.5fr), align: horizon,
