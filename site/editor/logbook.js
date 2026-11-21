@@ -30,6 +30,11 @@
     id: 'LogbookId', slots: 'LogbookSlots', images: 'LogbookImages',
     added: 'LogbookAdded', kind: 'LogbookPageKind', exercise: 'LogbookExercise', pageId: 'LogbookPageId',
   };
+  // The export paints everything flat, and parks the editable layer (each
+  // page's own contents and annotations, and the form) under this key, which
+  // PDF viewers ignore. Opening the export in the editor puts it back. The
+  // photos and drawings are stored once, shared by both, so the file barely grows.
+  const PARK = 'NB2420Editable';
 
   // ---------------------------------------------------------------- options
   document.addEventListener('webviewerloaded', () => {
@@ -451,6 +456,34 @@
   }
 
   // ------------------------------------------------------------ rewriting
+  // An exported log book opened again: its editable layer back in place, or
+  // null when the file has none (not an export, or one from before parking).
+  async function unparked(doc) {
+    const info = (await doc.getMetadata().catch(() => null))?.info;
+    // pdf.js does not pass custom Info keys on; the export's Producer and Keywords are standard ones.
+    if (!/nb2420-logbook/.test(`${info?.Producer || ''} ${info?.Keywords || ''}`)) return null;
+    const pl = await PDFDocument.load(await doc.getData(), { updateMetadata: false });
+    const N = n => PDFName.of(n);
+    const park = pl.catalog.lookup(N(PARK));
+    if (!(park instanceof PDFDict)) return null;
+    const own = park.lookup(N('PageCount'))?.asNumber?.() ?? pl.getPageCount();
+    while (pl.getPageCount() > own) pl.removePage(pl.getPageCount() - 1);   // pages the overflow moved text to
+    for (const page of pl.getPages()) {
+      const p = page.node.lookup(N(PARK));
+      if (!(p instanceof PDFDict)) continue;
+      for (const k of ['Contents', 'Annots']) {
+        const v = p.get(N(k));
+        if (v) page.node.set(N(k), v); else page.node.delete(N(k));
+      }
+      page.node.delete(N(PARK));
+    }
+    const acro = park.get(N('AcroForm'));
+    if (acro) pl.catalog.set(N('AcroForm'), acro);
+    pl.catalog.delete(N(PARK));
+    for (const k of ['LogbookExported', 'LogbookFields', 'Keywords']) pl.getInfoDict().delete(N(k));
+    return pl.save({ updateFieldAppearances: false });
+  }
+
   async function reopen(bytes) {
     const a = app();
     const page = a.pdfViewer.currentPageNumber;
@@ -970,6 +1003,14 @@
     const imageLabel = (slot, m) => `[[NB2420:image slot="${slot}" filled="yes"${attr('exercise', m.exercise)}` +
       `${attr('file', m.original_filename)}${attr('sha256', m.sha256)}${attr('sha512', m.sha512)}]]`;
 
+    const ownPages = pl.getPageCount();
+    const copyOf = v => { const o = v && ctx.lookup(v); return o instanceof PDFArray ? ctx.obj(o.asArray()) : v; };
+    for (const page of pl.getPages()) {
+      const parked = {};
+      for (const k of ['Contents', 'Annots']) if (page.node.get(N(k))) parked[k] = copyOf(page.node.get(N(k)));
+      page.node.set(N(PARK), ctx.obj(parked));
+    }
+    let loose = 0;
     for (const [pageIndex, page] of pl.getPages().entries()) {
       const key = fontKey(page);
       const { height: PH } = page.getSize();
@@ -1024,6 +1065,12 @@
           const slot = nm.slice('nb2420-slot:'.length), m = slotMeta(slot);
           exact.images[slot] = m;
           labels.push([imageLabel(slot, m), ...top(rectHere)]);
+        } else if (sub === '/Stamp' && rectHere) {                       // image dragged or pasted onto the page
+          const id = `loose:${pageIndex + 1}-${++loose}`;
+          const m = { kind: 'loose', page: pageIndex + 1, exercise: exerciseAt(pageIndex, Math.max(rectHere[1], rectHere[3])),
+            rect: rectHere.map(v => Math.round(v * 10) / 10) };
+          exact.images[id] = m;
+          labels.push([`[[NB2420:image loose="${id.slice(6)}" filled="yes"${attr('exercise', m.exercise)}]]`, ...top(rectHere)]);
         }
         const ap = d.lookup(N('AP'));
         if (!(ap instanceof PDFDict)) continue;
@@ -1114,6 +1161,8 @@
       if (t.value.trim() || t.opts?.ref) drawFieldText(t.page, font, charset, t.rect, t.value, t.da, t.ff, t.q, t.opts || {});
       label(t.page, t.key, '[[/NB2420:field]]', x2 - 20, y1 + 1);
     }
+    const acroRef = pl.catalog.get(N('AcroForm'));
+    pl.catalog.set(N(PARK), ctx.obj({ Version: 1, PageCount: ownPages, ...(acroRef ? { AcroForm: acroRef } : {}) }));
     pl.catalog.delete(N('AcroForm'));
     pl.setKeywords(['nb2420-logbook']);
     pl.setProducer('nb2420-logbook editor');
@@ -1690,6 +1739,14 @@
       state.otherTab = false;
     }
     const doc = a.pdfDocument;
+    if (fresh) {
+      const editable = await unparked(doc).catch(err => { console.error('[logbook] could not reopen the export', err); return null; });
+      if (editable && a.pdfDocument === doc) {
+        await a.open({ data: editable, filename: state.filename });
+        toast('Opened your exported log book. You can keep working on it.', 6000);
+        return;
+      }
+    }
     await aliasesReady;   // logbookId() in analyse() needs the alias map
     await analyse();
     if (a.pdfDocument !== doc) return; // another file was opened meanwhile

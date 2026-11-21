@@ -1,0 +1,33 @@
+# Tests the logbook editor in a real browser (tools/editor_test.py).
+# It opens the editor with Playwright, fills in a logbook, exports it, opens the
+# export again and checks nothing was lost. Screenshots and a report.md are
+# uploaded as an artifact. Runs on pull requests that touch the editor, by hand
+# from the Actions tab, and when another workflow calls it. There is no timed run.
+name: editor test
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    paths:
+      - 'site/editor/**'
+      - 'site/pdfjs/web/viewer.html'
+      - 'tools/editor_test.py'
+      - '.github/workflows/editor-test.yml'
+
+jobs:
+  editor-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright pypdf
+      - run: python -m playwright install --with-deps chromium
+      - run: python tools/editor_test.py
+      # Keep the screenshots and report even when the test fails.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: editor-test
+          path: editor-test/

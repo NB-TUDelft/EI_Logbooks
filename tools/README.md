@@ -65,3 +65,15 @@ python tools/sync_templates.py        # or: ... sync_templates.py <path to the b
 python tools/build_logbooks.py
 cd site && python -m http.server 8765
 ```
+
+## Editor test
+
+`editor_test.py` opens the logbook editor in headless Chromium (Playwright),
+checks the toolbar, fields, exports, images and dialogs, and exports then reopens
+a filled logbook. Needs `pip install playwright pypdf` and
+`python -m playwright install chromium`. Results go to `editor-test/<date>/`
+(screenshots and `report.md`); the `editor test` workflow runs it on pull requests.
+
+```
+python tools/editor_test.py
+```
