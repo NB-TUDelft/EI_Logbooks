@@ -33,7 +33,7 @@
 )
 
 #v(3pt)
-*Combined dividers* #h(6pt) #hint[Tasks A4, S2, I3, I4 and I5, leading to C3]
+#subsection([Combined dividers], note: [Tasks A4, S2, I3, I4 and I5, leading to C3])
 #v(3pt)
 #prompt[I3: record each separate divider output relative to the common ground.]
 #grid(
@@ -51,11 +51,11 @@
 )
 
 #pagebreak()
-*Setup* #h(6pt) #prompt[Sketch the circuit you built and label the nodes you probed, or name a photo you hand in beside this entry.]
+#subsection([Setup]) #h(6pt) #prompt[Sketch the circuit you built and label the nodes you probed, or name a photo you hand in beside this entry.]
 #v(3pt)
 #sketchbox("setup", height: 120pt)
 
-*Function generator and loading* #h(6pt) #hint[Tasks A3, A5,A6, I6, I7, C1 to C4]
+#subsection([Function generator and loading], note: [Tasks A3, A5,A6, I6, I7, C1 to C4])
 #v(3pt)
 #prompt[C4: sine, 2 V RMS displayed, 1 kHz, zero offset in every row. Enter 1 k#sym.Omega in the blank load cell. Disconnected means one resistor-bank lead is removed; the DMM stays connected. No selector jumper gives 1 M#sym.Omega.]
 #v(3pt)

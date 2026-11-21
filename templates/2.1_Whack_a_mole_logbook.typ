@@ -7,7 +7,7 @@
 
 #section("BUILD AND INVESTIGATE", note: "Tasks A1, A2, I1 to I5. This manual has no simulate task.")
 
-*Pull configuration* #h(6pt) #hint[Tasks A1, A2 and I1]
+#subsection([Pull configuration], note: [Tasks A1, A2 and I1])
 #v(3pt)
 #table(
   columns: (1.1fr, 1fr, 1fr, 1fr, 1fr), align: horizon,
@@ -26,7 +26,7 @@
 #line_field("led_orientation")
 
 #v(6pt)
-*Game features* #h(6pt) #prompt[Tick what your game does, and name the pins you used.]
+#subsection([Game features]) #h(6pt) #prompt[Tick what your game does, and name the pins you used.]
 #v(3pt)
 #grid(
   columns: (auto, 1.1fr, auto, 1fr), column-gutter: 6pt, row-gutter: 7pt, align: horizon,
@@ -37,7 +37,7 @@
 )
 
 #v(6pt)
-*Troubleshooting log* #h(6pt) #hint[Task C2. This table is the point of the manual, so fill it as you go, not afterwards.]
+#subsection([Troubleshooting log], note: [Task C2. This table is the point of the manual, so fill it as you go, not afterwards.])
 #v(3pt)
 #let tr(i) = (line_field("sym" + str(i)), line_field("cause" + str(i)), line_field("fix" + str(i)))
 #table(
@@ -48,7 +48,7 @@
 
 #v(6pt)
 #pagebreak()
-*C1 Pull configuration and LEDs* #h(6pt) #prompt[How must an LED be connected to light? What does a pin read when the button is not pressed, pull-up and pull-down? Why is the resistor necessary? If the LED lights on release rather than press, what does that tell you?]
+#subsection([C1 Pull configuration and LEDs]) #h(6pt) #prompt[How must an LED be connected to light? What does a pin read when the button is not pressed, pull-up and pull-down? Why is the resistor necessary? If the LED lights on release rather than press, what does that tell you?]
 #area("c1", height: 74pt)
 
 #closing(

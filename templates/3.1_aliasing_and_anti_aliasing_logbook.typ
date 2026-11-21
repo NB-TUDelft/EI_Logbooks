@@ -25,7 +25,7 @@
 )
 
 #v(6pt)
-*Square wave harmonics* #h(6pt) #hint[Tasks A2 and I2: 100 Hz square, odd harmonics]
+#subsection([Square wave harmonics], note: [Tasks A2 and I2: 100 Hz square, odd harmonics])
 #v(3pt)
 #let hm(id, h) = (h, line_field(id + "_rel"), line_field(id + "_where"), line_field(id + "_meas"))
 #table(
@@ -36,7 +36,16 @@
 )
 
 #v(6pt)
-*Anti-aliasing filter* #h(6pt) #hint[Tasks A3 and I3: $R = 10$ k#sym.Omega, $f_c = 1 slash (2 pi R C)$]
+// One block, so the heading and prompt never stay behind on the page before the box.
+#block(breakable: false)[
+  #subsection([Square wave spectrum], note: [Task I2])
+  #v(3pt)
+  #prompt[Add the frequency-domain plot of your sampled 100 Hz square wave. Label each peak with its frequency and mark $f_N$.]
+  #sketchbox("i2_spectrum", height: 150pt)
+]
+
+#v(6pt)
+#subsection([Anti-aliasing filter], note: [Tasks A3 and I3: $R = 10$ k#sym.Omega, $f_c = 1 slash (2 pi R C)$])
 #v(3pt)
 #table(
   columns: (auto, 1fr, 1fr, 1.4fr), align: horizon,
@@ -48,7 +57,7 @@
 #pagebreak()
 #section("EQUIVALENT TIME SAMPLING AND CONCLUSIONS", note: "Tasks I4, C1 to C3")
 
-*Equivalent time sampling* #h(6pt) #hint[Task I4: 73 Hz sine]
+#subsection([Equivalent time sampling], note: [Task I4: 73 Hz sine])
 #v(3pt)
 #field_row(
   [Sampling rate used:], line_field("ets_fs"),
@@ -57,17 +66,18 @@
 )
 
 #v(6pt)
-*C1 Aliasing* #h(6pt) #prompt[What is aliasing and when does it occur? What is the highest component measurable at $f_s$? For a 500 Hz signal, which of 800, 1000, 1200 or 5500 Hz would you sample at, and why?]
+#subsection([C1 Aliasing]) #h(6pt) #prompt[What is aliasing and when does it occur? What is the highest component measurable at $f_s$? For a 500 Hz signal, which of 800, 1000, 1200 or 5500 Hz would you sample at, and why?]
 #area("c1", height: 58pt)
 
 #v(4pt)
-*C2 Anti-aliasing* #h(6pt) #prompt[Explain how an RC low-pass filter prevents aliasing, and which capacitor you would pick for the Task I2 square wave.]
+#subsection([C2 Anti-aliasing]) #h(6pt) #prompt[Explain how an RC low-pass filter prevents aliasing, and which capacitor you would pick for the Task I2 square wave.]
 #area("c2", height: 50pt)
 
 #v(4pt)
-*C3 Equivalent time sampling* #h(6pt) #prompt[What must be true of the signal, what must be known about the timing, and what kind of event can never be reconstructed this way?]
+#subsection([C3 Equivalent time sampling]) #h(6pt) #prompt[What must be true of the signal, what must be known about the timing, and what kind of event can never be reconstructed this way?]
 #area("c3", height: 50pt)
 
 #closing(
-  graph: false,
+  graph_prompt: [Add the frequency-domain plot of your filtered signal from Task I3, for one capacitor. Mark the 700 and 900 Hz aliases and how much they dropped.],
+  graph_height: 120pt,
 )
