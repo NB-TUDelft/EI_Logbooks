@@ -31,10 +31,12 @@ NAME = re.compile(r'(\d+)\.(\d+)_([^\s/]+)_logbook')
 
 def copy_bookmarks(src, pdf):
     """The fillable step drops Typst's bookmarks; the site reads them to tag
-    each image with its exercise, so put them back."""
+    each image with its exercise, so put them back. With their position on the
+    page (simple=False), not only the page: two sections on one page must stay
+    apart."""
     import pymupdf
     import typst
-    toc = pymupdf.open(stream=typst.compile(str(src), root=str(TEMPLATES), format='pdf')).get_toc()
+    toc = pymupdf.open(stream=typst.compile(str(src), root=str(TEMPLATES), format='pdf')).get_toc(simple=False)
     doc = pymupdf.open(pdf)
     if toc and not doc.get_toc():
         doc.set_toc(toc)
