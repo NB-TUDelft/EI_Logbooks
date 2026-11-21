@@ -7,4 +7,4 @@ site_password.local.txt
 .wrangler/
 __pycache__/
 site/pdfjs/web/viewer_plain.html
-dogfood/
+editor-test/
