@@ -22,6 +22,7 @@ One row per handed-in file. Columns:
   <field id>           one column per answer box, named as in the template
   <check id>           True/False per checkbox
   img_<slot>_file, img_<slot>_sha256   per image box, for site exports
+  img_loose_<page>_<n>_exercise        per image dragged or pasted onto a page
 
 Answers are read from the JSON copy the site stores in the PDF (Info key
 /LogbookFields), never from the page text, so nothing a student types (quotes,
@@ -71,7 +72,10 @@ def _from_site_export(reader, info):
     row.update(data.get('fields', {}))
     row.update({k: v is not None for k, v in data.get('checks', {}).items()})
     for slot, m in (data.get('images') or {}).items():
-        col = 'img_' + slot.replace('page:', 'page_')
+        col = 'img_' + slot.replace('page:', 'page_').replace('loose:', 'loose_').replace('-', '_')
+        if (m or {}).get('kind') == 'loose':       # dragged or pasted onto a page: no file name or hash
+            row[col + '_exercise'] = m.get('exercise')
+            continue
         row[col + '_file'] = (m or {}).get('original_filename')
         row[col + '_sha256'] = (m or {}).get('sha256')
     return row
