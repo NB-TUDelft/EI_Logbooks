@@ -35,7 +35,7 @@ Everything runs in the student's own browser; nothing is uploaded.
 | [course book](https://github.com/NB-TUDelft/Electronic_Instrumentation) `book/manuals/weekN/` | the logbooks, as Typst files: **the one place to write them** | adding or changing a logbook |
 | [`templates/`](templates/) | a copy of those, plus our shared parts and the Highlight list | the Highlight box |
 | [`site/`](site/) | the website | changing how the site works |
-| [`site/logbook/aliases.json`](site/logbook/aliases.json) | maps old logbook numbers to new ones, so students keep their saved work ([how](templates/README.md#students-saved-work)) | merging or renumbering a logbook |
+| [`site/editor/aliases.json`](site/editor/aliases.json) | maps old logbook numbers to new ones, so students keep their saved work ([how](templates/README.md#students-saved-work)) | merging or renumbering a logbook |
 | [`tools/`](tools/) | all submissions into one table, and the build scripts | reading handed-in logbooks |
 
 ## How it publishes

@@ -5,8 +5,7 @@ Static files, published as-is to GitHub Pages. No server code.
 | Path | What |
 |------|------|
 | `index.html` | start page: list of logbooks, and the `?logbook=` redirect |
-| `logbook/logbook.js`, `logbook.css` | the add-on: everything below |
-| `logbook/pdf-lib.min.js`, `fontkit.umd.min.js`, `fonts/` | pdf-lib 1.17.1, fontkit 1.1.1, Inter (for the export) |
+| [`editor/`](editor/) | the add-on to pdf.js that does everything below ([README](editor/README.md)) |
 | `pdfjs/` | Mozilla pdf.js 6.4.299 viewer; only `web/viewer.html` is changed, to load the add-on |
 | `logbooks/` | built PDFs and `index.json`; made by `tools/build_logbooks.py` (the workflow commits them), do not edit by hand |
 
@@ -38,16 +37,4 @@ Turnitin compares only what students wrote.
 
 ## Changing the code
 
-1. Edit `logbook/logbook.js` or `logbook/logbook.css`.
-2. **Bump the version** in `pdfjs/web/viewer.html` (`logbook.js?v=...` and
-   `logbook.css?v=...`). Browsers cache these files for 10 minutes; a new
-   version reaches students straight away.
-3. Test locally (commands in [`tools/`](../tools/README.md#used-by-the-automatic-build)): fill a
-   logbook, insert an image, export, open the PDF, and run
-   `python tools/logbooks_to_dataframe.py` on its folder. Check both: text the tool reads
-   can still be invisible on the page.
-
-For automated tests, `nb2420Logbook.setTestFile('<id of an input type=file>')`
-followed by `nb2420Logbook.slotInsert('graph')` inserts an image without a
-file dialog; `insertImagePage()` takes all the files in that input.
-`nb2420Logbook.state()` returns slots, images and pages.
+See [`editor/README.md`](editor/README.md).

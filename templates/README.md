@@ -53,7 +53,7 @@ renamed file keeps its work. A save is the student's whole PDF: they keep the
 version they started on until "Start fresh".
 
 To renumber or merge a logbook, first add it to
-[`site/logbook/aliases.json`](../site/logbook/aliases.json):
+[`site/editor/aliases.json`](../site/editor/aliases.json):
 
 - `"keys": {"2.3": "2.2"}`: 2.3 saves move to 2.2. If both exist, the newest
   wins and the other stays under "Use older save".

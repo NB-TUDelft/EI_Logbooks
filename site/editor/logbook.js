@@ -204,11 +204,11 @@
   // ------------------------------------------------- save keys and aliases
   // Saves are keyed by logbook number ("2.3"), not by file name, so two files for
   // the same logbook share one save and a renamed file keeps its students' work.
-  // logbook/aliases.json maps old keys or numbers to a new number ("keys") and
+  // editor/aliases.json maps old keys or numbers to a new number ("keys") and
   // ?logbook= links to another number ("links"). Saves made under a file name
   // (before 2026-11-20) are moved to their number once, by migrateSaves().
   let aliases = { keys: {}, links: {} };
-  const aliasesReady = fetch('../../logbook/aliases.json', { cache: 'no-cache' })
+  const aliasesReady = fetch('../../editor/aliases.json', { cache: 'no-cache' })
     .then(r => r.ok ? r.json() : {})
     .then(j => { aliases = { keys: (j && j.keys) || {}, links: (j && j.links) || {} }; })
     .catch(() => {});
