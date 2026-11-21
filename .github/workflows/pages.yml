@@ -3,12 +3,12 @@
 #
 # The logbooks are written in the course book (NB-TUDelft/Electronic_Instrumentation,
 # book/manuals/weekN/). Every run first copies them into templates/
-# (tools/sync_templates.py). Runs come from pushes here, a nightly schedule,
-# the Run workflow button, and the book itself: after its own check passes, the
-# book's deploy starts this workflow (workflow_dispatch, with book-ref = the
-# book commit and a run-name) and waits for it, so a failure here fails the
-# book's run too. The older "book-logbooks-changed" repository_dispatch still
-# works.
+# (tools/sync_templates.py). Runs come from pushes here, the Run workflow
+# button, and the book itself: when a log book entry changes there and its own
+# check passes, the book's deploy starts this workflow (workflow_dispatch, with
+# book-ref = the book commit and a run-name) and waits for it, so a failure here
+# fails the book's run too. There is no timed run: nothing changes here unless
+# something is pushed.
 # The PDFs are only rebuilt when something they depend on changed (the copied
 # templates, the build tools, or this file), or when started by hand from the
 # Actions tab. The build uses the newest sphinx-typst-render from its GitHub
@@ -30,10 +30,6 @@ on:
         description: 'Name for this run, so the book can find it and wait for it'
         type: string
         required: false
-  repository_dispatch:     # the course book says its logbooks changed (event type book-logbooks-changed)
-    types: [book-logbooks-changed]
-  schedule:
-    - cron: '15 0 * * *'   # nightly: picks up changes in the course book if its signal did not come
 permissions:
   contents: write      # commit the copied templates, built PDFs and README links
   pages: write
@@ -77,7 +73,7 @@ jobs:
         run: |
           if [ -n "$(git status --porcelain templates)" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           before="${{ github.event.before }}"
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "repository_dispatch" ] || [ -n "${{ inputs.book-ref }}" ]; then echo "build=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ -n "${{ inputs.book-ref }}" ]; then echo "build=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ "${{ github.event_name }}" != "push" ] || ! git cat-file -e "$before^{commit}" 2>/dev/null; then
             echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
@@ -112,15 +108,15 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # A nightly run that changed nothing does not publish again.
+      # A run started by the book that changed nothing does not publish again.
       - name: Leave the folder README off the website
-        if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
+        if: inputs.book-ref == '' || steps.commit.outputs.changed == 'true'
         run: rm -f site/README.md
-      - if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
+      - if: inputs.book-ref == '' || steps.commit.outputs.changed == 'true'
         uses: actions/upload-pages-artifact@v3
         with: { path: site }
       - id: deploy
-        if: github.event_name != 'schedule' || steps.commit.outputs.changed == 'true'
+        if: inputs.book-ref == '' || steps.commit.outputs.changed == 'true'
         uses: actions/deploy-pages@v4
         continue-on-error: true   # GitHub sometimes cannot find the artifact yet
       - if: steps.deploy.outcome == 'failure'
