@@ -1,37 +1,16 @@
 # Publishes site/ to GitHub Pages on every push to main
 # (repo settings: Pages source = GitHub Actions).
 #
-# The logbooks are written in the course book (NB-TUDelft/Electronic_Instrumentation,
-# book/manuals/weekN/). Every run first copies them into templates/
-# (tools/sync_templates.py). Runs come from pushes here, the Run workflow
-# button, and the book itself: when a log book entry changes there and its own
-# check passes, the book's deploy starts this workflow (workflow_dispatch, with
-# book-ref = the book commit and a run-name) and waits for it, so a failure here
-# fails the book's run too. There is no timed run: nothing changes here unless
-# something is pushed.
-# The PDFs are only rebuilt when something they depend on changed (the copied
-# templates, the build tools, or this file), or when started by hand from the
-# Actions tab. The build uses the newest sphinx-typst-render from its GitHub
-# main branch and commits the templates, PDFs, index.json and README links back,
-# so later site-only pushes publish them without rebuilding.
+# This repo is archived. The logbooks now live in the course book
+# (NB-TUDelft/Electronic_Instrumentation), and site/ only sends visitors there.
+# Nothing is copied from the book or rebuilt any more.
 name: build and publish
-# The book starts this workflow and waits for it; it finds its own run by this name.
-run-name: ${{ inputs.run-name || github.event.head_commit.message || github.workflow }}
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      book-ref:
-        description: 'Book commit to copy the logbooks from (empty: the tip of its main)'
-        type: string
-        required: false
-      run-name:
-        description: 'Name for this run, so the book can find it and wait for it'
-        type: string
-        required: false
 permissions:
-  contents: write      # commit the copied templates, built PDFs and README links
+  contents: read
   pages: write
   id-token: write
 concurrency: { group: pages, cancel-in-progress: false }
@@ -41,82 +20,12 @@ jobs:
     environment: { name: github-pages, url: "${{ steps.deploy.outputs.page_url }}" }
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-
-      - id: pages                 # gives the site's real address (base_url)
-        uses: actions/configure-pages@v5
-
-      # Fails, and publishes nothing, when a logbook in the book is misnamed,
-      # in the wrong week folder, doubled, or imports something we lack.
-      - name: Copy the templates from the course book
-        id: sync
-        run: python3 tools/sync_templates.py
-        env: { BOOK_REF: "${{ inputs.book-ref }}" }
-
-      # A logbook edited or uploaded into templates/ here would be overwritten
-      # by the copy above, so say where to make the change instead.
-      - name: Logbooks are written in the course book
-        if: github.event_name == 'push'
-        run: |
-          before="${{ github.event.before }}"
-          git cat-file -e "$before^{commit}" 2>/dev/null || exit 0
-          hand=$(git diff --name-only "$before" HEAD -- 'templates/*_logbook.typ' |
-                 while read -r f; do [ -n "$(git status --porcelain -- "$f")" ] && echo "$f"; done || true)
-          [ -z "$hand" ] && exit 0
-          msg="Changed here by hand, but logbooks are written in the course book (NB-TUDelft/Electronic_Instrumentation, book/manuals/weekN/). Make the change there; the copy here is overwritten."
-          echo "$hand" | while read -r f; do echo "::error file=$f,title=Logbook edited here::$msg"; done
-          { echo "### Logbook edited here"; echo; echo "$msg"; echo; echo "$hand" | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
-          exit 1
-
-      - name: Did the templates change?
-        id: changed
-        run: |
-          if [ -n "$(git status --porcelain templates)" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          before="${{ github.event.before }}"
-          if [ -n "${{ inputs.book-ref }}" ]; then echo "build=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "${{ github.event_name }}" != "push" ] || ! git cat-file -e "$before^{commit}" 2>/dev/null; then
-            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          if git diff --name-only "$before" HEAD | grep -qE '^(templates/.*.typ$|tools/(build_logbooks|outline_template)\.py|tools/requirements\.txt|\.github/workflows/pages\.yml)'; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - if: steps.changed.outputs.build == 'true'
-        uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - name: Build logbook PDFs (newest renderer)
-        if: steps.changed.outputs.build == 'true'
-        run: |
-          pip install -r tools/requirements.txt
-          pip show sphinx-typst-render | grep -E '^Version'
-          python tools/build_logbooks.py
-        env: { SITE_URL: "${{ steps.pages.outputs.base_url }}/" }
-      - name: README links (site address and logbook list, every run)
-        run: python3 tools/build_logbooks.py --links-only
-        env: { SITE_URL: "${{ steps.pages.outputs.base_url }}/" }
-      - name: Commit the templates, build and README
-        id: commit
-        run: |
-          git add -A templates site/logbooks README.md
-          if ! git diff --cached --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Build logbook PDFs / update README links" -m "Templates from the course book at ${{ steps.sync.outputs.commit }}."
-            git push
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # A run started by the book that changed nothing does not publish again.
+      - uses: actions/configure-pages@v5
       - name: Leave the folder README off the website
-        if: inputs.book-ref == '' || steps.commit.outputs.changed == 'true'
         run: rm -f site/README.md
-      - if: inputs.book-ref == '' || steps.commit.outputs.changed == 'true'
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with: { path: site }
       - id: deploy
-        if: inputs.book-ref == '' || steps.commit.outputs.changed == 'true'
         uses: actions/deploy-pages@v4
         continue-on-error: true   # GitHub sometimes cannot find the artifact yet
       - if: steps.deploy.outcome == 'failure'

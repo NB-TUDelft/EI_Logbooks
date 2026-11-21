@@ -3,103 +3,33 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NB2420 Logbooks</title>
+<title>NB2420 Logbooks have moved</title>
+<meta http-equiv="refresh" content="0; url=https://nb-tudelft.github.io/Electronic_Instrumentation/miscellaneous/logbooks.html">
+<link rel="canonical" href="https://nb-tudelft.github.io/Electronic_Instrumentation/miscellaneous/logbooks.html">
 <style>
-@font-face { font-family: "Inter"; font-weight: 100 900; font-display: swap; src: url("editor/fonts/inter-latin-wght.woff2") format("woff2"); }
-:root {
-  --navy: #0c2340; --cyan: #00a6d6; --cyan-ink: #00799c;
-  --bg: #eef1f5; --card: #fff; --ink: #16181d; --muted: #5f6672; --line: #e1e5eb;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #12161d; --card: #1b212b; --ink: #eef1f5; --muted: #a3acb9; --line: #2a323e; --cyan-ink: #4cc6ea; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Inter", "Segoe UI", system-ui, sans-serif; }
+:root { --navy: #0c2340; --cyan: #00a6d6; --bg: #eef1f5; --ink: #16181d; --muted: #5f6672; }
+@media (prefers-color-scheme: dark) { :root { --bg: #12161d; --ink: #eef1f5; --muted: #a3acb9; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
 header { background: var(--navy); color: #fff; }
 .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
 header .wrap { padding-top: 36px; padding-bottom: 32px; }
 .badge { display: inline-block; font: 600 12px/1 inherit; letter-spacing: .06em; padding: 6px 9px; border-radius: 6px; background: var(--cyan); color: var(--navy); }
 h1 { font-size: 26px; line-height: 1.2; margin: 14px 0 6px; font-weight: 650; }
-header p { margin: 0; color: #c9d3e0; max-width: 56ch; }
 main.wrap { padding-top: 30px; padding-bottom: 56px; }
-h2 { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 26px 0 10px; }
-h2:first-child { margin-top: 0; }
-ul.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 520px) { ul.list { grid-template-columns: 1fr; } }
-a.item { display: flex; gap: 12px; align-items: center; height: 100%; padding: 13px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
-a.item:hover, a.item:focus-visible { border-color: var(--cyan); transform: translateY(-1px); outline: none; }
-.tpl { display: block; margin: 0 -32px 8px; padding: 14px 32px 16px; border: 0; border-radius: 12px; background: color-mix(in srgb, var(--cyan) 7%, var(--card)); }
-.tpl h2 { margin: 0 0 8px; color: var(--cyan-ink); }
-.tpl ul.list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 840px) { .tpl { margin: 0 -10px 8px; padding: 12px 10px 14px; } }
-@media (max-width: 520px) { .tpl ul.list { grid-template-columns: 1fr; } }
-.tpl p { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
-.num { font-weight: 650; font-variant-numeric: tabular-nums; color: var(--cyan-ink); min-width: 2.2em; }
-.how { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); counter-reset: step; padding: 0; margin: 0; list-style: none; }
-.how li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; font-size: 14px; color: var(--muted); counter-increment: step; }
-.how li::before { content: counter(step); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
-@media (prefers-color-scheme: dark) { .how li::before { background: var(--cyan); color: var(--navy); } }
-.how strong { color: var(--ink); font-weight: 600; }
-.note { margin-top: 22px; font-size: 13px; color: var(--muted); }
+a.go { display: inline-block; padding: 11px 16px; border-radius: 10px; background: var(--cyan); color: var(--navy); font-weight: 600; text-decoration: none; }
+.note { font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <div class="wrap">
     <span class="badge">NB2420</span>
-    <h1>Electronic Instrumentation logbooks</h1>
-    <p>Fill in your logbook in the browser, add your graphs and photos, and export the PDF you hand in on Brightspace.</p>
+    <h1>The logbooks have moved</h1>
   </div>
 </header>
 <main class="wrap">
-  <div id="list"><p>Loading…</p></div>
-
-  <h2>How it works</h2>
-  <ol class="how">
-    <li><strong>Open your logbook.</strong> Your work is saved in this browser as you type, and is there again when you come back.</li>
-    <li><strong>Fill it in.</strong> Type in the boxes and use <strong>Insert image</strong> for graphs and photos. <strong>Image page</strong> and <strong>Text page</strong> add a page at the end.</li>
-    <li><strong>Export PDF</strong> when you are done, and hand in that file on Brightspace.</li>
-  </ol>
-  <p class="note">Works in Chrome, Edge and Firefox. Nothing is uploaded: your answers stay on your own computer until you hand in the PDF. The shield button in the logbook deletes what this browser kept.</p>
+  <p>The logbooks are now in the Electronic Instrumentation course book, next to the lab manuals.</p>
+  <p><a class="go" href="https://nb-tudelft.github.io/Electronic_Instrumentation/miscellaneous/logbooks.html">Go to the logbooks</a></p>
 </main>
-<script>
-const viewer = file => 'pdfjs/web/viewer.html?file=' + encodeURIComponent('../../logbooks/' + file);
-const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-const links = fetch('editor/aliases.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : {}).then(j => (j && j.links) || {}).catch(() => ({}));
-fetch('logbooks/index.json', { cache: 'no-cache' }).then(r => r.json()).then(async list => {
-  let want = new URLSearchParams(location.search).get('logbook');
-  if (want) want = (await links)[want] || want;   // editor/aliases.json "links"
-  const hit = want && list.find(l => l.id === want);
-  if (hit) { location.replace(viewer(hit.file)); return; }
-  const box = document.getElementById('list');
-  box.innerHTML = '';
-  const groups = new Map([[0, list.filter(l => l.highlight)]]);   // 0 = Highlight box (templates/highlight.txt)
-  for (const l of list) {
-    const w = parseInt(l.id, 10);
-    if (!groups.has(w)) groups.set(w, []);
-    if (w !== 0) groups.get(w).push(l);            // 0.x files are not listed
-  }
-  for (const w of [...groups.keys()].sort((a, b) => a - b)) {
-    if (!groups.get(w).length) continue;
-    const h = document.createElement('h2');
-    h.textContent = w === 0 ? 'Highlight' : 'Week ' + w;
-    const ul = Object.assign(document.createElement('ul'), { className: 'list' });
-    for (const l of groups.get(w)) {
-      const a = Object.assign(document.createElement('a'), { className: 'item', href: viewer(l.file) });
-      a.innerHTML = '<span class="num"></span><span class="title"></span>';
-      a.querySelector('.num').textContent = l.id;
-      a.querySelector('.title').textContent = cap(l.title);
-      const li = document.createElement('li'); li.append(a); ul.append(li);
-    }
-    if (w === 0) {                                 // highlight box, on top
-      const tpl = Object.assign(document.createElement('section'), { className: 'tpl' });
-      tpl.append(h, ul);
-      box.append(tpl);
-    } else {
-      box.append(h, ul);
-    }
-  }
-}).catch(() => { document.getElementById('list').textContent = 'Could not load the list of logbooks.'; });
-</script>
 </body>
 </html>
