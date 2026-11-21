@@ -72,7 +72,8 @@ cd site && python -m http.server 8765
 checks the toolbar, fields, exports, images and dialogs, and exports then reopens
 a filled logbook. Needs `pip install playwright pypdf` and
 `python -m playwright install chromium`. Results go to `editor-test/<date>/`
-(screenshots and `report.md`); the `editor test` workflow runs it on pull requests.
+(screenshots and `report.md`). It tests the old editor, which now redirects to
+the course book, so it no longer passes here; it is kept for reference.
 
 ```
 python tools/editor_test.py
