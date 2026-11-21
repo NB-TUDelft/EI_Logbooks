@@ -168,11 +168,13 @@ body.lb-custom .annotationLayer :is(.textWidgetAnnotation, .choiceWidgetAnnotati
 .lb-btn.lb-danger:hover { background: #a92814; }
 
 .lb-restore { position: fixed; z-index: 9050; top: calc(var(--lb-bar-h, 56px) + 16px); left: 50%; transform: translateX(-50%);
-  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; width: min(620px, calc(100vw - 32px));
-  padding: 14px 16px; background: #fff; border-radius: 14px; font: 13px/1.4 var(--lb-font); color: var(--lb-ink);
-  box-shadow: 0 0 0 1px var(--lb-line), 0 16px 40px rgba(16, 24, 40, .18); }
-.lb-restore-text { flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; }
-.lb-restore-text strong { font-weight: 600; font-size: 14px; }
+  display: flex; flex-wrap: wrap; gap: 15px 24px; align-items: center; width: min(930px, calc(100vw - 32px));
+  padding: 21px 24px; background: #fff; border-radius: 21px; font: 20px/1.4 var(--lb-font); color: var(--lb-ink);
+  box-shadow: 0 0 0 1px var(--lb-line), 0 24px 60px rgba(16, 24, 40, .24); }
+/* 1.5x the normal size: students missed this bar after a reload. */
+.lb-restore .lb-btn { height: 51px; padding: 0 21px; border-radius: 13px; font-size: 20px; }
+.lb-restore-text { flex: 1 1 390px; display: flex; flex-direction: column; gap: 3px; }
+.lb-restore-text strong { font-weight: 600; font-size: 21px; }
 .lb-restore-text span { color: var(--lb-muted); }
 
 .lb-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--lb-ink); color: #fff;
